@@ -1,4 +1,4 @@
-// Run with: node --test ~/.config/omarchy/plugins/pieter.system-stats/tests/
+// Run with: node --test ~/.config/omarchy/plugins/system-monitor/tests/
 const test = require("node:test")
 const assert = require("node:assert")
 const fs = require("node:fs")

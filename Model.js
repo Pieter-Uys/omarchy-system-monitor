@@ -1,4 +1,4 @@
-// Pure parsing and formatting helpers for pieter.system-stats.
+// Pure parsing and formatting helpers for system-monitor.
 // Everything read from the helper script is treated as untrusted and bounded here.
 
 var MAX_LINES = 64

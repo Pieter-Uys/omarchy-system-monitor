@@ -11,8 +11,8 @@ import "Model.js" as Model
 // /proc and /sys only. Every displayed string is plain text.
 Panel {
   id: root
-  moduleName: "pieter.system-stats"
-  ipcTarget: "pieter.system-stats"
+  moduleName: "system-monitor"
+  ipcTarget: "system-monitor"
   manageIpc: false
 
   readonly property string helperPath: String(Qt.resolvedUrl("bin/system-stats")).replace(/^file:\/\//, "")
@@ -111,7 +111,7 @@ Panel {
   }
 
   ShellIpc {
-    target: "pieter.system-stats"
+    target: "system-monitor"
     function open() { root.open() }
     function close() { root.close() }
     function show() { root.open() }

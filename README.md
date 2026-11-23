@@ -21,7 +21,7 @@ omarchy plugin add https://github.com/Pieter-Uys/omarchy-system-monitor.git --en
 Choose the `right` section when asked. To get later changes:
 
 ```bash
-omarchy plugin update pieter.system-stats
+omarchy plugin update system-monitor
 ```
 
 ## Settings
@@ -34,8 +34,8 @@ omarchy plugin update pieter.system-stats
 ## IPC
 
 ```bash
-omarchy-shell pieter.system-stats toggle
-omarchy-shell pieter.system-stats cycleLabel
+omarchy-shell system-monitor toggle
+omarchy-shell system-monitor cycleLabel
 ```
 
 ## Privacy
@@ -46,5 +46,5 @@ and `top`. The plugin makes no network requests and writes no files.
 ## Tests
 
 ```bash
-node --test ~/.config/omarchy/plugins/pieter.system-stats/tests/
+node --test ~/.config/omarchy/plugins/system-monitor/tests/
 ```

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Local system readings for the pieter.system-stats bar widget.
+# Local system readings for the system-monitor bar widget.
 # Reads only /proc and /sys (plus `top` for the process list); never uses the network.
 #
 #   system-stats          tab-separated sample: cpu, mem, swap, load, uptime, cores, temps

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "pieter.system-stats",
+  "id": "system-monitor",
   "name": "System Stats",
   "version": "1.0.0",
-  "author": "Pieter",
+  "author": "System Monitor contributors",
   "license": "MIT",
   "description": "CPU, memory and temperature in the bar, with a panel of detailed readings and the busiest processes. Reads /proc and /sys locally; no network access.",
   "kinds": [
