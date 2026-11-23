@@ -24,9 +24,6 @@ Panel {
   readonly property bool combined: barLabel === "CPU + Memory" && !button.vertical
   readonly property Item anchorButton: combined ? comboButton : button
 
-  function comboText(cpu, mem) {
-    return root.chipGlyph + " " + cpu + " " + root.memGlyph + " " + mem
-  }
   readonly property int intervalMs: Model.intervalMs(setting("refreshIntervalSec", 3))
 
   property var stats: Model.reading({}, null)
@@ -145,7 +142,7 @@ Panel {
   Timer { interval: Math.max(3000, root.intervalMs); running: root.opened; repeat: true; onTriggered: root.refreshProcs() }
 
   readonly property bool showLabel: barText !== "" && !button.vertical
-  readonly property real openPanelIndicatorWidth: combined ? comboButton.labelWidth : (showLabel ? button.glyphPaintedWidth : 0)
+  readonly property real openPanelIndicatorWidth: combined ? comboRow.width : (showLabel ? button.glyphPaintedWidth : 0)
 
   implicitWidth: combined ? comboButton.implicitWidth : button.implicitWidth
   implicitHeight: combined ? comboButton.implicitHeight : button.implicitHeight
@@ -160,26 +157,38 @@ Panel {
     else root.toggle()
   }
 
-  // Fit the readings on screen. Measuring every digit as "0" means the width
-  // only changes when a reading gains or loses a digit, so the bar doesn't jitter.
-  TextMetrics {
-    id: widestCombo
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-    text: root.comboText(root.pct(root.stats.cpu), root.pct(root.stats.memFraction)).replace(/\d/g, "0")
-  }
-
   WidgetButton {
     id: comboButton
     anchors.fill: parent
     visible: root.combined
     bar: root.bar
-    text: root.comboText(root.pct(root.stats.cpu), root.pct(root.stats.memFraction))
+    labelVisible: false
+    hasVisualContent: true
     foreground: root.levelColor(root.barLevel)
     horizontalMargin: 4
-    fixedWidth: Math.ceil(widestCombo.advanceWidth + scaledHorizontalMargin * 2)
+    fixedWidth: Math.ceil(comboRow.implicitWidth + scaledHorizontalMargin * 2)
     tooltipText: root.barTooltip
     onPressed: function(b) { root.onBarPressed(b) }
+
+    Row {
+      id: comboRow
+      x: Math.round((parent.width - width) / 2)
+      y: Math.round((parent.height - height) / 2)
+      spacing: Style.space(6)
+      scale: comboButton.pressScale
+
+      BarStat {
+        glyph: root.chipGlyph
+        value: root.pct(root.stats.cpu)
+        tint: comboButton.foreground
+      }
+
+      BarStat {
+        glyph: root.memGlyph
+        value: root.pct(root.stats.memFraction)
+        tint: comboButton.foreground
+      }
+    }
   }
 
   // Size the slot for the widest reading so the bar never jitters as digits change.
@@ -332,6 +341,55 @@ Panel {
     color: root.fg
     font.family: root.fontFamily
     font.pixelSize: Style.font.body
+  }
+
+  // An icon drawn the way Omarchy draws its bar icons, with its reading beside it.
+  // Measuring every digit as "0" means the width only changes when a reading
+  // gains or loses a digit, so the bar doesn't jitter.
+  component BarStat: Item {
+    id: stat
+    property string glyph: ""
+    property string value: ""
+    property color tint: root.fg
+
+    implicitWidth: Style.bar.iconCanvas + Style.space(3) + Math.ceil(valueSlot.advanceWidth)
+    implicitHeight: Style.bar.iconCanvas
+
+    Behavior on tint {
+      enabled: !root.bar || root.bar.foregroundAnimationEnabled
+      ColorAnimation { duration: Style.duration(160) }
+    }
+
+    OpticalGlyph {
+      width: Style.bar.iconCanvas
+      height: Style.bar.iconCanvas
+      text: stat.glyph
+      fontFamily: root.fontFamily
+      fontSize: Style.bar.iconFont
+      paintedSize: Style.bar.iconSize
+      color: stat.tint
+    }
+
+    TextMetrics {
+      id: valueSlot
+      font: valueText.font
+      text: stat.value.replace(/\d/g, "0")
+    }
+
+    FontMetrics {
+      id: valueMetrics
+      font: valueText.font
+    }
+
+    PlainText {
+      id: valueText
+      x: Style.bar.iconCanvas + Style.space(3)
+      y: (parent.height - height) / 2
+        + (valueMetrics.descent - valueMetrics.ascent + valueMetrics.tightBoundingRect("0").height) / 2
+      text: stat.value
+      color: stat.tint
+      renderType: Text.NativeRendering
+    }
   }
 
   component Meter: Column {

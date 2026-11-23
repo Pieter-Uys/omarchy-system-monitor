@@ -71,8 +71,8 @@ top_procs() {
   # top's first frame has no time delta (every process reads 0.0), so take a second frame
   # half a second later and keep only that one.
   # top reports 100% per core, so divide by the core count to get a share of the whole CPU,
-  # matching the panel's overall meter. LC_ALL=C keeps the decimal point parseable.
-  HOME=$cfg XDG_CONFIG_HOME=$cfg LC_ALL=C top -b -n2 -d0.5 -w 512 -o %CPU 2>/dev/null | LC_ALL=C awk -v cores="$(nproc 2>/dev/null || echo 1)" '
+  # matching the panel's overall meter.
+  HOME=$cfg XDG_CONFIG_HOME=$cfg top -b -n2 -d0.5 -w 512 -o %CPU 2>/dev/null | awk -v cores="$(nproc 2>/dev/null || echo 1)" '
     $1 == "PID" { frame++; n = 0; next }
     frame == 2 && NF >= 12 && n < 5 {
       name = $12
