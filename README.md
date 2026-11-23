@@ -6,7 +6,8 @@ An Omarchy shell bar widget that shows CPU and memory usage with their icons
 - CPU, memory, swap, CPU temperature and GPU temperature meters (tinted as they run hot)
 - Load average, core count and uptime
 - A scrollable list of the 50 busiest processes (refreshed while the panel is open)
-- Hover a process to stop it, with a confirmation. Force kill is offered only if it keeps running.
+- Hover a process to stop it, with a confirmation. While it shuts down, its row shows
+  how long it has been stopping and a Force kill button. Nothing is force-killed automatically.
   System processes and critical desktop processes such as Hyprland have no stop button.
 
 **Click** opens the panel. **Right-click** cycles the bar reading:

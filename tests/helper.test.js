@@ -83,7 +83,7 @@ test("an unknown argument prints usage and fails", () => {
   const r = run(["--bad"])
   assert.strictEqual(r.status, 1)
   assert.strictEqual(r.stdout, "")
-  assert.match(r.stderr, /^Usage: system-monitor \[--top \| --kill <pid> <start> \[--force\]\]\n$/)
+  assert.match(r.stderr, /^Usage: system-monitor \[--top \| --kill <pid> <start> \[--force\] \| --check <pid> <start>\.\.\.\]\n$/)
 })
 
 const sleepMs = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
@@ -91,6 +91,11 @@ const readComm = pid => { try { return fs.readFileSync(`/proc/${pid}/comm`, "utf
 const statFields = pid => fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /s, "").split(" ")
 const startOf = pid => statFields(pid)[19]
 const isLive = pid => { try { return statFields(pid)[0] !== "Z" } catch { return false } }
+
+function waitUntilGone(pid) {
+  for (let i = 0; i < 200 && isLive(pid); i++) sleepMs(10)
+  assert.ok(!isLive(pid))
+}
 
 // Every process stopped here is one this test spawned itself.
 function withProcess(command, args, comm, fn) {
@@ -130,8 +135,8 @@ test("a critical desktop process can't be listed as stoppable or stopped", () =>
 
 test("--kill stops the process it was asked to", () => {
   withProcess("sleep", ["30"], "sleep", pid => {
-    assert.strictEqual(run(["--kill", String(pid), startOf(pid)]).stdout, "stopped\n")
-    assert.ok(!isLive(pid))
+    assert.strictEqual(run(["--kill", String(pid), startOf(pid)]).stdout, "sent\n")
+    waitUntilGone(pid)
   })
 })
 
@@ -142,13 +147,23 @@ test("--kill leaves a process alone if its PID was reused", () => {
   })
 })
 
-test("--force is needed for a process that ignores the graceful stop", () => {
+test("only --force ends a process that ignores the graceful stop", () => {
   withProcess("bash", ["-c", 'trap "" TERM; exec sleep 30'], "sleep", pid => {
     const start = startOf(pid)
-    assert.strictEqual(run(["--kill", String(pid), start]).stdout, "running\n")
+    assert.strictEqual(run(["--kill", String(pid), start]).stdout, "sent\n")
+    sleepMs(300)
     assert.ok(isLive(pid))
-    assert.strictEqual(run(["--kill", String(pid), start, "--force"]).stdout, "stopped\n")
-    assert.ok(!isLive(pid))
+    assert.strictEqual(run(["--kill", String(pid), start, "--force"]).stdout, "sent\n")
+    waitUntilGone(pid)
+  })
+})
+
+test("--check reports only the exact processes still running", () => {
+  withProcess("sleep", ["30"], "sleep", pid => {
+    const start = startOf(pid)
+    assert.strictEqual(run(["--check", String(pid), start, "9000199", "5"]).stdout, `alive\t${pid}\nok\n`)
+    assert.strictEqual(run(["--check", String(pid), "1"]).stdout, "ok\n")
+    assert.strictEqual(run(["--check", "1;id", start]).stdout, "ok\n")
   })
 })
 

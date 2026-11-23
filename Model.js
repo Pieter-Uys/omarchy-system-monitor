@@ -137,7 +137,40 @@ function parseProcs(raw) {
 // Anything unexpected from the helper counts as refused.
 function parseKillResult(raw) {
   var s = String(raw || "").trim()
-  return ["stopped", "running", "gone", "changed", "refused"].indexOf(s) >= 0 ? s : "refused"
+  return ["sent", "gone", "changed", "refused"].indexOf(s) >= 0 ? s : "refused"
+}
+
+// The PIDs a --check found running, or null if the check didn't finish.
+function parseAlive(raw) {
+  var lines = String(raw || "").trim().split("\n")
+  if (lines[lines.length - 1] !== "ok" || lines.length > MAX_PROCS + 1) return null
+  var alive = {}
+  for (var i = 0; i < lines.length - 1; i++) {
+    var p = lines[i].split("\t")
+    if (p.length !== 2 || p[0] !== "alive" || !/^\d{1,10}$/.test(p[1])) return null
+    alive[parseInt(p[1], 10)] = true
+  }
+  return alive
+}
+
+// Processes shutting down stay pinned at the top, even if they'd drop out of the busiest 50.
+function mergeStopping(procs, stopping) {
+  var out = [], pinned = {}, i
+  var live = {}
+  for (i = 0; i < procs.length; i++) live[procs[i].pid + ":" + procs[i].start] = procs[i]
+  for (i = 0; i < stopping.length; i++) {
+    var s = stopping[i], key = s.pid + ":" + s.start, now = live[key] || s
+    pinned[key] = true
+    out.push({ pid: s.pid, start: s.start, name: s.name, cpu: now.cpu, mem: now.mem, killable: false,
+      stopping: true, forced: s.forced, since: s.since })
+  }
+  for (i = 0; i < procs.length; i++) {
+    var p = procs[i]
+    if (pinned[p.pid + ":" + p.start]) continue
+    out.push({ pid: p.pid, start: p.start, name: p.name, cpu: p.cpu, mem: p.mem, killable: p.killable,
+      stopping: false, forced: false, since: 0 })
+  }
+  return out
 }
 
 // "normal" | "warm" | "hot" for a 0..1 fraction, used to tint the meters.

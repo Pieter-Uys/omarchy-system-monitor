@@ -6,8 +6,9 @@
 #   system-monitor --top    the 50 busiest processes as:
 #                           proc <pid> <cpu%> <mem%> <killable 0|1> <start-ticks> <name>
 #   system-monitor --kill <pid> <start-ticks> [--force]
-#                           stops one of your processes; prints stopped, running, gone,
-#                           changed or refused
+#                           signals one of your processes; prints sent, gone, changed or refused
+#   system-monitor --check <pid> <start-ticks>...
+#                           prints alive <pid> for each one still running, then ok
 
 set -u
 export LC_ALL=C
@@ -23,8 +24,12 @@ case "${1:-}" in
     shift
     stop_proc "$@"
     ;;
+  --check)
+    shift
+    check_procs "$@"
+    ;;
   *)
-    echo "Usage: system-monitor [--top | --kill <pid> <start> [--force]]" >&2
+    echo "Usage: system-monitor [--top | --kill <pid> <start> [--force] | --check <pid> <start>...]" >&2
     exit 1
     ;;
 esac

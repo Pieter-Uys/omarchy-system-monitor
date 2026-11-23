@@ -61,9 +61,9 @@ top_procs() {
   rm -rf -- "$cfg"
 }
 
-# Prints one word: stopped, running, gone, changed or refused.
+# Sends the signal and returns straight away. Prints one word: sent, gone, changed or refused.
 stop_proc() {
-  local pid=${1:-} expected=${2:-} signal=TERM i
+  local pid=${1:-} expected=${2:-} signal=TERM
   [[ ${3:-} == --force ]] && signal=KILL
   if [[ ! $pid =~ ^[1-9][0-9]{0,9}$ || ! $expected =~ ^[1-9][0-9]{0,19}$ || $# -gt 3 ]]; then
     echo refused
@@ -85,12 +85,18 @@ stop_proc() {
     echo refused
     return
   fi
-  for ((i = 0; i < 20; i++)); do
-    if ! read_proc_stat "$pid" || [[ $proc_state == Z || $proc_start != "$expected" ]]; then
-      echo stopped
-      return
+  echo sent
+}
+
+# For each <pid> <start> pair still running, prints: alive <pid>. Always ends with ok,
+# so a failed check can't be mistaken for every process having exited.
+check_procs() {
+  while (($# >= 2)); do
+    if [[ $1 =~ ^[1-9][0-9]{0,9}$ && $2 =~ ^[1-9][0-9]{0,19}$ ]] &&
+      read_proc_stat "$1" && [[ $proc_state != Z && $proc_start == "$2" ]]; then
+      printf 'alive\t%s\n' "$1"
     fi
-    sleep 0.1
+    shift 2
   done
-  echo running
+  echo ok
 }

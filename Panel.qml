@@ -36,6 +36,8 @@ Panel {
   // Hold the list still while it's being aimed at, so a row can't move under the cursor.
   readonly property bool procsHeld: procListHovered || killer.target !== null
 
+  readonly property var procRows: Model.mergeStopping(root.procs, killer.stopping)
+
   readonly property color fg: root.bar ? root.bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
 
@@ -155,6 +157,7 @@ Panel {
     id: killer
     helperPath: root.helperPath
     translations: strings
+    active: root.opened
     onProcessGone: function(pid) {
       root.procs = root.procs.filter(function(p) { return p.pid !== pid })
     }
@@ -273,7 +276,7 @@ Panel {
         id: killDialog
         anchors.fill: parent
         z: 10
-        opened: killer.target !== null && !killer.running
+        opened: killer.target !== null
         selectedIndex: 0
         foreground: root.fg
         fontFamily: root.fontFamily
@@ -418,7 +421,7 @@ Panel {
               spacing: Style.space(8)
 
               Repeater {
-                model: root.procs
+                model: root.procRows
                 ProcRow {
                   required property var modelData
                   foreground: root.fg
@@ -427,6 +430,13 @@ Panel {
                   cpu: strings.t("percent").arg(Commons.I18n.formatNumber(modelData.cpu, 1))
                   mem: root.pct(modelData.mem / 100)
                   killable: modelData.killable
+                  stopping: modelData.stopping
+                  forced: modelData.forced
+                  forceText: strings.t("killForce")
+                  status: modelData.stopping
+                    ? strings.t(modelData.forced ? "killForcing" : "killStopping")
+                      .arg(Commons.I18n.formatNumber(Math.max(0, Math.floor((killer.now - modelData.since) / 1000))))
+                    : ""
                   onKillRequested: killer.request(modelData)
                 }
               }

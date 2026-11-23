@@ -140,7 +140,36 @@ test("reads which processes can be stopped", () => {
 })
 
 test("an unexpected kill result counts as refused", () => {
-  for (const r of ["stopped", "running", "gone", "changed", "refused"]) assert.strictEqual(M.parseKillResult(r + "\n"), r)
+  for (const r of ["sent", "gone", "changed", "refused"]) assert.strictEqual(M.parseKillResult(r + "\n"), r)
   assert.strictEqual(M.parseKillResult("<b>stopped</b>"), "refused")
   assert.strictEqual(M.parseKillResult(""), "refused")
+})
+
+test("a failed check is never read as every process having exited", () => {
+  assert.deepStrictEqual(Object.keys(M.parseAlive("alive\t12\nalive\t34\nok\n")), ["12", "34"])
+  assert.deepStrictEqual(Object.keys(M.parseAlive("ok\n")), [])
+  for (const raw of ["", "alive\t12\n", "alive\tabc\nok", "<b>ok</b>"]) assert.strictEqual(M.parseAlive(raw), null)
+})
+
+test("stopping processes stay pinned at the top with live readings", () => {
+  const procs = [
+    { pid: 1, start: "10", name: "busy", cpu: 9, mem: 1, killable: true },
+    { pid: 2, start: "20", name: "steam", cpu: 3, mem: 2, killable: true }
+  ]
+  const stopping = [
+    { pid: 2, start: "20", name: "steam", cpu: 8, mem: 8, forced: false, since: 5 },
+    { pid: 3, start: "30", name: "idle", cpu: 0.5, mem: 4, forced: true, since: 6 }
+  ]
+  const rows = M.mergeStopping(procs, stopping)
+  assert.deepStrictEqual(Array.from(rows, r => [r.name, r.stopping, r.forced, r.cpu]), [
+    ["steam", true, false, 3], ["idle", true, true, 0.5], ["busy", false, false, 9]
+  ])
+  assert.strictEqual(rows[0].killable, false)
+  assert.strictEqual(rows[2].killable, true)
+})
+
+test("a reused PID isn't pinned as the process being stopped", () => {
+  const rows = M.mergeStopping([{ pid: 2, start: "99", name: "new", cpu: 1, mem: 1, killable: true }],
+    [{ pid: 2, start: "20", name: "old", cpu: 0, mem: 0, forced: false, since: 1 }])
+  assert.deepStrictEqual(Array.from(rows, r => [r.name, r.stopping]), [["old", true], ["new", false]])
 })
