@@ -3,7 +3,11 @@
 # Reads only /proc and /sys (plus `top` for the process list); never uses the network.
 #
 #   system-monitor          tab-separated sample: cpu, mem, swap, load, uptime, cores, temps
-#   system-monitor --top    the five busiest processes as: proc <pid> <cpu%> <mem%> <name>
+#   system-monitor --top    the 50 busiest processes as:
+#                           proc <pid> <cpu%> <mem%> <killable 0|1> <start-ticks> <name>
+#   system-monitor --kill <pid> <start-ticks> [--force]
+#                           stops one of your processes; prints stopped, running, gone,
+#                           changed or refused
 
 set -u
 export LC_ALL=C
@@ -15,8 +19,12 @@ source "$lib/processes.sh"
 case "${1:-}" in
   "") sample ;;
   --top) top_procs ;;
+  --kill)
+    shift
+    stop_proc "$@"
+    ;;
   *)
-    echo "Usage: system-monitor [--top]" >&2
+    echo "Usage: system-monitor [--top | --kill <pid> <start> [--force]]" >&2
     exit 1
     ;;
 esac

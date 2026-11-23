@@ -59,7 +59,7 @@ test("bounds the number of lines parsed", () => {
 
 test("markup-shaped process names stay inert strings and are bounded", () => {
   const evil = '<img src="https://example.invalid/tracker">'
-  const procs = M.parseProcs(`proc\t42\t12.5\t1.0\t${evil}\nproc\t43\t1\t1\t${"x".repeat(500)}`, 16)
+  const procs = M.parseProcs(`proc\t42\t12.5\t1.0\t0\t0\t${evil}\nproc\t43\t1\t1\t0\t0\t${"x".repeat(500)}`, 16)
   assert.strictEqual(procs.length, 2)
   // Kept verbatim (never interpreted) — the QML sink is Text.PlainText.
   assert.strictEqual(procs[0].name, evil)
@@ -68,20 +68,20 @@ test("markup-shaped process names stay inert strings and are bounded", () => {
 
 test("strips control characters and rejects bad rows", () => {
   const procs = M.parseProcs([
-    "proc\t1\t5\t1\tbad\u001b[31mname",
-    "proc\tnotapid\t5\t1\tx",
-    "proc\t2\tNaN\t1\tx",
+    "proc\t1\t5\t1\t0\t0\tbad\u001b[31mname",
+    "proc\tnotapid\t5\t1\t0\t0\tx",
+    "proc\t2\tNaN\t1\t0\t0\tx",
     "other\t3\t1\t1\tx",
-    "proc\t4\t99999\t500\tclamped"
+    "proc\t4\t99999\t500\t0\t0\tclamped"
   ].join("\n"))
   assert.deepStrictEqual(Array.from(procs, p => p.name), ["bad[31mname", "clamped"])
   assert.strictEqual(procs[1].cpu, 100)
   assert.strictEqual(procs[1].mem, 100)
 })
 
-test("caps the process list at five", () => {
-  const raw = Array.from({ length: 20 }, (_, i) => `proc\t${i + 1}\t1\t1\tp${i}`).join("\n")
-  assert.strictEqual(M.parseProcs(raw, 1).length, 5)
+test("caps the process list at 50", () => {
+  const raw = Array.from({ length: 60 }, (_, i) => `proc\t${i + 1}\t1\t1\t0\t0\tp${i}`).join("\n")
+  assert.strictEqual(M.parseProcs(raw).length, 50)
 })
 
 test("label cycling and interval clamping", () => {
@@ -118,4 +118,22 @@ test("every translation key used in Panel.qml exists in en.json", () => {
   const keys = [...qml.matchAll(/strings\.tn?\("([^"]+)"/g)].map(m => m[1])
   assert.ok(keys.length > 0)
   for (const k of keys) assert.ok(k in en, `missing i18n key: ${k}`)
+})
+
+test("reads which processes can be stopped", () => {
+  const procs = M.parseProcs([
+    "proc\t10\t1\t1\t1\t555\tmine",
+    "proc\t11\t1\t1\t0\t0\tsystem",
+    "proc\t12\t1\t1\t1\t0\tno-start",
+    "proc\t13\t1\t1\t2\t555\tbad-flag",
+    "proc\t14\t1\t1\t1\tabc\tbad-start"
+  ].join("\n"))
+  assert.deepStrictEqual(Array.from(procs, p => [p.name, p.killable]), [["mine", true], ["system", false], ["no-start", false]])
+  assert.strictEqual(procs[0].start, "555")
+})
+
+test("an unexpected kill result counts as refused", () => {
+  for (const r of ["stopped", "running", "gone", "changed", "refused"]) assert.strictEqual(M.parseKillResult(r + "\n"), r)
+  assert.strictEqual(M.parseKillResult("<b>stopped</b>"), "refused")
+  assert.strictEqual(M.parseKillResult(""), "refused")
 })

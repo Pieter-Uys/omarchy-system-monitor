@@ -3,7 +3,7 @@
 
 var MAX_LINES = 64
 var MAX_FIELDS = 8
-var MAX_PROCS = 5
+var MAX_PROCS = 50
 var MAX_NAME = 48
 
 function toInt(value) {
@@ -122,15 +122,22 @@ function parseProcs(raw) {
   var lines = String(raw || "").split("\n")
   for (var i = 0; i < lines.length && i < MAX_LINES && out.length < MAX_PROCS; i++) {
     var p = lines[i].split("\t")
-    if (p.length < 5 || p[0] !== "proc") continue
+    if (p.length < 7 || p[0] !== "proc") continue
     if (!/^\d{1,10}$/.test(p[1])) continue
     var cpu = toNumber(p[2]), mem = toNumber(p[3])
     if (isNaN(cpu) || isNaN(mem)) continue
-    var name = cleanName(p.slice(4).join(" "))
+    if (!/^[01]$/.test(p[4]) || !/^\d{1,20}$/.test(p[5])) continue
+    var name = cleanName(p.slice(6).join(" "))
     if (name === "") continue
-    out.push({ pid: parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), mem: clamp(mem, 0, 100), name: name })
+    out.push({ pid: parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), mem: clamp(mem, 0, 100), killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
   }
   return out
+}
+
+// Anything unexpected from the helper counts as refused.
+function parseKillResult(raw) {
+  var s = String(raw || "").trim()
+  return ["stopped", "running", "gone", "changed", "refused"].indexOf(s) >= 0 ? s : "refused"
 }
 
 // "normal" | "warm" | "hot" for a 0..1 fraction, used to tint the meters.
