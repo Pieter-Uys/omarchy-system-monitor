@@ -10,6 +10,20 @@ An Omarchy shell bar widget that shows CPU and memory usage with their icons
 **Click** opens the panel. **Right-click** cycles the bar reading:
 CPU + Memory → CPU → Memory → Temperature → Icon only.
 
+## Install
+
+On a new Omarchy install:
+
+```bash
+omarchy plugin add https://github.com/Pieter-Uys/omarchy-system-monitor.git --enable
+```
+
+Choose the `right` section when asked. To get later changes:
+
+```bash
+omarchy plugin update pieter.system-stats
+```
+
 ## Settings
 
 | Key | Values | Default |
