@@ -1,0 +1,22 @@
+{
+  "title": "System",
+  "cpu": "CPU",
+  "memory": "Memory",
+  "swap": "Swap",
+  "cpuTemp": "CPU temp",
+  "gpuTemp": "GPU temp",
+  "load": "Load",
+  "uptime": "Up",
+  "noSwap": "None",
+  "topProcesses": "Top processes",
+  "process": "Process",
+  "loading": "Reading…",
+  "coresMeta": { "one": "%1 core", "other": "%1 cores" },
+  "uptimeDays": "%1d %2h",
+  "uptimeHours": "%1h %2m",
+  "uptimeMinutes": "%1m",
+  "memValue": "%1 / %2 GiB",
+  "percent": "%1%",
+  "degrees": "%1°C",
+  "tooltip": "CPU %1 · Memory %2 · %3"
+}

@@ -1,0 +1,95 @@
+#!/bin/bash
+# Local system readings for the pieter.system-stats bar widget.
+# Reads only /proc and /sys (plus `top` for the process list); never uses the network.
+#
+#   system-stats          tab-separated sample: cpu, mem, swap, load, uptime, cores, temps
+#   system-stats --top    the five busiest processes as: proc <pid> <cpu%> <mem%> <name>
+
+set -u
+export LC_ALL=C
+
+sample() {
+  # user nice system idle iowait irq softirq steal (guest time is already in user)
+  awk 'NR == 1 {
+    idle = $5 + $6
+    total = 0
+    for (i = 2; i <= 9 && i <= NF; i++) total += $i
+    printf "cpu\t%d\t%d\n", idle, total
+  }' /proc/stat
+
+  awk '
+    /^MemTotal:/ { t = $2 }
+    /^MemAvailable:/ { a = $2 }
+    /^SwapTotal:/ { st = $2 }
+    /^SwapFree:/ { sf = $2 }
+    END { printf "mem\t%d\t%d\nswap\t%d\t%d\n", t, a, st, sf }
+  ' /proc/meminfo
+
+  local l1 l5 l15 rest up
+  read -r l1 l5 l15 rest < /proc/loadavg
+  printf 'load\t%s\t%s\t%s\n' "$l1" "$l5" "$l15"
+  read -r up rest < /proc/uptime
+  printf 'uptime\t%d\n' "${up%.*}"
+  printf 'cores\t%d\n' "$(nproc 2>/dev/null || echo 1)"
+
+  temps
+}
+
+temps() {
+  local -A seen=()
+  local h name key f label
+  for h in /sys/class/hwmon/hwmon*; do
+    [[ -r $h/name ]] || continue
+    name=$(<"$h/name")
+    case $name in
+      k10temp | coretemp | zenpower | cpu_thermal) key=cputemp ;;
+      amdgpu | radeon | nouveau) key=gputemp ;;
+      *) continue ;;
+    esac
+    [[ -n ${seen[$key]:-} ]] && continue
+
+    # Prefer the package/die sensor; fall back to the first one.
+    f=""
+    for label in "$h"/temp*_label; do
+      [[ -r $label ]] || continue
+      case $(<"$label") in
+        Tctl | Tdie | "Package id 0" | edge) f=${label%_label}_input; break ;;
+      esac
+    done
+    [[ -z $f ]] && f=$h/temp1_input
+    [[ -r $f ]] || continue
+
+    printf '%s\t%d\n' "$key" "$(<"$f")"
+    seen[$key]=1
+  done
+}
+
+top_procs() {
+  # An empty HOME and XDG_CONFIG_HOME keep a personal toprc from reordering top's columns.
+  local cfg
+  cfg=$(mktemp -d) || return
+  # top's first frame has no time delta (every process reads 0.0), so take a second frame
+  # half a second later and keep only that one.
+  # top reports 100% per core, so divide by the core count to get a share of the whole CPU,
+  # matching the panel's overall meter. LC_ALL=C keeps the decimal point parseable.
+  HOME=$cfg XDG_CONFIG_HOME=$cfg LC_ALL=C top -b -n2 -d0.5 -w 512 -o %CPU 2>/dev/null | LC_ALL=C awk -v cores="$(nproc 2>/dev/null || echo 1)" '
+    $1 == "PID" { frame++; n = 0; next }
+    frame == 2 && NF >= 12 && n < 5 {
+      name = $12
+      for (i = 13; i <= NF; i++) name = name " " $i
+      if (name == "top") next
+      printf "proc\t%s\t%.1f\t%s\t%s\n", $1, $9 / (cores > 0 ? cores : 1), $10, name
+      n++
+    }
+  '
+  rm -rf -- "$cfg"
+}
+
+case "${1:-}" in
+  "") sample ;;
+  --top) top_procs ;;
+  *)
+    echo "Usage: system-stats [--top]" >&2
+    exit 1
+    ;;
+esac

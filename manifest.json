@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "pieter.system-stats",
+  "name": "System Stats",
+  "version": "1.0.0",
+  "author": "Pieter",
+  "license": "MIT",
+  "description": "CPU, memory and temperature in the bar, with a panel of detailed readings and the busiest processes. Reads /proc and /sys locally; no network access.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "System Stats",
+    "description": "CPU, memory and temperature readout with a detail panel and top processes.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "barLabel": "CPU + Memory",
+      "refreshIntervalSec": 3
+    },
+    "schema": [
+      {
+        "key": "barLabel",
+        "type": "enum",
+        "label": "Bar reading",
+        "options": ["CPU + Memory", "CPU", "Memory", "Temperature", "Icon only"],
+        "defaultValue": "CPU + Memory",
+        "description": "Which readings to show on the bar. Right-click the widget to cycle through them."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 3
+      }
+    ]
+  }
+}
