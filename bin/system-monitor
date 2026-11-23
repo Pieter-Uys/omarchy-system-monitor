@@ -1,0 +1,22 @@
+#!/bin/bash
+# Local system readings for the system-monitor bar widget.
+# Reads only /proc and /sys (plus `top` for the process list); never uses the network.
+#
+#   system-monitor          tab-separated sample: cpu, mem, swap, load, uptime, cores, temps
+#   system-monitor --top    the five busiest processes as: proc <pid> <cpu%> <mem%> <name>
+
+set -u
+export LC_ALL=C
+
+lib=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib
+source "$lib/sample.sh"
+source "$lib/processes.sh"
+
+case "${1:-}" in
+  "") sample ;;
+  --top) top_procs ;;
+  *)
+    echo "Usage: system-monitor [--top]" >&2
+    exit 1
+    ;;
+esac

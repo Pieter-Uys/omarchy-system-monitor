@@ -7,7 +7,7 @@ import qs.Ui
 import "Model.js" as Model
 
 // System Stats: a CPU/memory/temperature readout in the bar with a detail
-// panel. All readings come from the bundled bin/system-stats, which reads
+// panel. All readings come from the bundled bin/system-monitor, which reads
 // /proc and /sys only. Every displayed string is plain text.
 Panel {
   id: root
@@ -15,7 +15,7 @@ Panel {
   ipcTarget: "system-monitor"
   manageIpc: false
 
-  readonly property string helperPath: String(Qt.resolvedUrl("bin/system-stats")).replace(/^file:\/\//, "")
+  readonly property string helperPath: String(Qt.resolvedUrl("bin/system-monitor")).replace(/^file:\/\//, "")
   readonly property string chipGlyph: String.fromCodePoint(0xF061A)
   readonly property string memGlyph: String.fromCodePoint(0xF035B)
 

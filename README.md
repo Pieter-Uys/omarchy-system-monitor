@@ -40,7 +40,7 @@ omarchy-shell system-monitor cycleLabel
 
 ## Privacy
 
-Everything is read locally by `bin/system-stats` from `/proc`, `/sys/class/hwmon`
+Everything is read locally by `bin/system-monitor` from `/proc`, `/sys/class/hwmon`
 and `top`. The plugin makes no network requests and writes no files.
 
 ## Tests
