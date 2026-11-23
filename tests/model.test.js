@@ -173,3 +173,34 @@ test("a reused PID isn't pinned as the process being stopped", () => {
     [{ pid: 2, start: "20", name: "old", cpu: 0, mem: 0, forced: false, since: 1 }])
   assert.deepStrictEqual(Array.from(rows, r => [r.name, r.stopping]), [["old", true], ["new", false]])
 })
+
+test("meters keep their order and have translated labels", () => {
+  assert.deepStrictEqual(Array.from(M.METERS), ["cpu", "memory", "swap", "cpuTemp", "gpuTemp"])
+  const en = JSON.parse(fs.readFileSync(path.join(root, "i18n", "en.json"), "utf8"))
+  for (const key of M.METERS) assert.ok(key in en, `missing i18n key: ${key}`)
+})
+
+test("each meter's visibility, fill and level", () => {
+  const stats = { cpu: 0.8, memFraction: 0.95, swapTotalKb: 1000, swapFraction: 0.5, cpuTemp: 72, gpuTemp: 90 }
+  const read = key => { const m = M.meter(key, stats); return [m.visible, m.fraction, m.level] }
+  assert.deepStrictEqual(read("cpu"), [true, 0.8, "warm"])
+  assert.deepStrictEqual(read("memory"), [true, 0.95, "hot"])
+  assert.deepStrictEqual(read("swap"), [true, 0.5, "normal"])
+  assert.deepStrictEqual(read("cpuTemp"), [true, 0.72, "warm"])
+  assert.deepStrictEqual(read("gpuTemp"), [true, 0.9, "hot"])
+})
+
+test("meters handle no swap and missing readings", () => {
+  const noSwap = M.meter("swap", { swapTotalKb: 0, swapFraction: NaN })
+  assert.deepStrictEqual([noSwap.visible, noSwap.fraction, noSwap.level], [true, 0, "normal"])
+  assert.strictEqual(M.meter("swap", { swapTotalKb: NaN, swapFraction: NaN }).visible, false)
+  for (const key of ["cpuTemp", "gpuTemp"]) {
+    const m = M.meter(key, { cpuTemp: NaN, gpuTemp: NaN })
+    assert.strictEqual(m.visible, false)
+    assert.ok(isNaN(m.fraction))
+    assert.strictEqual(m.level, "normal")
+  }
+  const cpu = M.meter("cpu", { cpu: NaN })
+  assert.deepStrictEqual([cpu.visible, cpu.level], [true, "normal"])
+  assert.strictEqual(M.meter("unknown", {}).visible, false)
+})

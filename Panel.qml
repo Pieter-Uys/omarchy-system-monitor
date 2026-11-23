@@ -66,6 +66,14 @@ Panel {
       .arg(Commons.I18n.formatNumber(Model.gib(totalKb), 1))
   }
 
+  function meterValue(key) {
+    var s = root.stats
+    if (key === "cpu") return root.pct(s.cpu)
+    if (key === "memory") return root.memText(s.memUsedKb, s.memTotalKb)
+    if (key === "swap") return s.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(s.swapUsedKb, s.swapTotalKb)
+    return root.deg(key === "cpuTemp" ? s.cpuTemp : s.gpuTemp)
+  }
+
   function uptimeText(sec) {
     var p = Model.uptimeParts(sec)
     if (!p) return ""
@@ -317,52 +325,22 @@ Panel {
           }
         }
 
-        Meter {
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          label: strings.t("cpu")
-          value: root.pct(root.stats.cpu)
-          fraction: root.stats.cpu
-          tint: root.levelColor(Model.level(root.stats.cpu))
-        }
+        // The list never changes, so refreshes update the meters instead of
+        // rebuilding them, which keeps their bars animating.
+        Repeater {
+          model: Model.METERS
 
-        Meter {
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          label: strings.t("memory")
-          value: root.memText(root.stats.memUsedKb, root.stats.memTotalKb)
-          fraction: root.stats.memFraction
-          tint: root.levelColor(Model.level(root.stats.memFraction))
-        }
-
-        Meter {
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          visible: !isNaN(root.stats.swapTotalKb)
-          label: strings.t("swap")
-          value: root.stats.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(root.stats.swapUsedKb, root.stats.swapTotalKb)
-          fraction: root.stats.swapTotalKb === 0 ? 0 : root.stats.swapFraction
-          tint: root.levelColor(Model.level(root.stats.swapFraction))
-        }
-
-        Meter {
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          visible: !isNaN(root.stats.cpuTemp)
-          label: strings.t("cpuTemp")
-          value: root.deg(root.stats.cpuTemp)
-          fraction: root.stats.cpuTemp / 100
-          tint: root.levelColor(Model.tempLevel(root.stats.cpuTemp))
-        }
-
-        Meter {
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          visible: !isNaN(root.stats.gpuTemp)
-          label: strings.t("gpuTemp")
-          value: root.deg(root.stats.gpuTemp)
-          fraction: root.stats.gpuTemp / 100
-          tint: root.levelColor(Model.tempLevel(root.stats.gpuTemp))
+          Meter {
+            required property string modelData
+            readonly property var reading: Model.meter(modelData, root.stats)
+            foreground: root.fg
+            fontFamily: root.fontFamily
+            visible: reading.visible
+            label: strings.t(modelData)
+            value: root.meterValue(modelData)
+            fraction: reading.fraction
+            tint: root.levelColor(reading.level)
+          }
         }
 
         PanelSeparator { foreground: root.fg }

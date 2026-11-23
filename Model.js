@@ -188,6 +188,30 @@ function tempLevel(c) {
   return "normal"
 }
 
+// The panel's meters, in display order. Each key is also its translation key.
+var METERS = ["cpu", "memory", "swap", "cpuTemp", "gpuTemp"]
+
+// Whether a meter shows, how full it is, and its warning level.
+function meter(key, stats) {
+  switch (key) {
+  case "cpu":
+    return { visible: true, fraction: stats.cpu, level: level(stats.cpu) }
+  case "memory":
+    return { visible: true, fraction: stats.memFraction, level: level(stats.memFraction) }
+  case "swap":
+    return {
+      visible: !isNaN(stats.swapTotalKb),
+      fraction: stats.swapTotalKb === 0 ? 0 : stats.swapFraction,
+      level: level(stats.swapFraction)
+    }
+  case "cpuTemp":
+    return { visible: !isNaN(stats.cpuTemp), fraction: stats.cpuTemp / 100, level: tempLevel(stats.cpuTemp) }
+  case "gpuTemp":
+    return { visible: !isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, level: tempLevel(stats.gpuTemp) }
+  }
+  return { visible: false, fraction: NaN, level: "normal" }
+}
+
 function gib(kb) {
   return kb / 1048576
 }
