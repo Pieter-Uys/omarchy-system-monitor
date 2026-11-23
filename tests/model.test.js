@@ -103,17 +103,24 @@ test("levels", () => {
   assert.strictEqual(M.tempLevel(90), "hot")
 })
 
-test("every Text in Panel.qml is plain text", () => {
-  const qml = fs.readFileSync(path.join(root, "Panel.qml"), "utf8")
+// Panel.qml plus its components.
+function allQml() {
+  const dir = path.join(root, "components")
+  const parts = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith(".qml")).map(f => path.join(dir, f)) : []
+  return [path.join(root, "Panel.qml"), ...parts].map(f => fs.readFileSync(f, "utf8")).join("\n")
+}
+
+test("every Text in the plugin's QML is plain text", () => {
+  const qml = allQml()
   const texts = qml.match(/\bText\s*\{/g) || []
-  // The only raw Text is the local PlainText component, which pins the format.
+  // The only raw Text is the PlainText component, which pins the format.
   assert.strictEqual(texts.length, 1)
-  assert.match(qml, /component PlainText: Text \{\s*textFormat: Text\.PlainText/)
+  assert.match(qml, /(?:component PlainText: |^)Text \{\s*textFormat: Text\.PlainText/m)
   assert.doesNotMatch(qml, /Text\.(RichText|StyledText|AutoText|MarkdownText)/)
 })
 
-test("every translation key used in Panel.qml exists in en.json", () => {
-  const qml = fs.readFileSync(path.join(root, "Panel.qml"), "utf8")
+test("every translation key used in the plugin's QML exists in en.json", () => {
+  const qml = allQml()
   const en = JSON.parse(fs.readFileSync(path.join(root, "i18n", "en.json"), "utf8"))
   const keys = [...qml.matchAll(/strings\.tn?\("([^"]+)"/g)].map(m => m[1])
   assert.ok(keys.length > 0)

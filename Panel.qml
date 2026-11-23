@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
+import "components"
 
 // System Stats: a CPU/memory/temperature readout in the bar with a detail
 // panel. All readings come from the bundled bin/system-monitor, which reads
@@ -32,11 +33,8 @@ Panel {
   property var procs: []
   property bool procsLoaded: false
   property bool procListHovered: false
-  property var killTarget: null
-  property bool killForce: false
-  property string killNotice: ""
   // Hold the list still while it's being aimed at, so a row can't move under the cursor.
-  readonly property bool procsHeld: procListHovered || killTarget !== null
+  readonly property bool procsHeld: procListHovered || killer.target !== null
 
   readonly property color fg: root.bar ? root.bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
@@ -114,42 +112,6 @@ Panel {
     root.stats = next
   }
 
-  function requestKill(proc) {
-    root.killNotice = ""
-    root.killForce = false
-    root.killTarget = proc
-  }
-
-  function cancelKill() {
-    root.killTarget = null
-    root.killForce = false
-  }
-
-  function confirmKill() {
-    if (!root.killTarget || killProc.running) return
-    var command = ["bash", root.helperPath, "--kill", String(root.killTarget.pid), root.killTarget.start]
-    if (root.killForce) command.push("--force")
-    killProc.command = command
-    killProc.running = true
-  }
-
-  function onKillResult(raw) {
-    var target = root.killTarget
-    if (!target) return
-    var result = Model.parseKillResult(raw)
-    if (result === "running" && !root.killForce) {
-      root.killForce = true
-      return
-    }
-    root.cancelKill()
-    if (result === "stopped" || result === "gone" || result === "changed") {
-      root.procs = root.procs.filter(function(p) { return p.pid !== target.pid })
-    }
-    root.killNotice = strings.t(result === "stopped" ? "killStopped"
-      : (result === "gone" || result === "changed") ? "killGone" : "killFailed").arg(target.name)
-    noticeTimer.restart()
-  }
-
   ShellIpc {
     target: "system-monitor"
     function open() { root.open() }
@@ -165,7 +127,7 @@ Panel {
       refresh()
       refreshProcs()
     } else {
-      cancelKill()
+      killer.cancel()
       procListHovered = false
     }
   }
@@ -189,12 +151,15 @@ Panel {
     }
   }
 
-  Process {
-    id: killProc
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onKillResult(text) }
+  KillController {
+    id: killer
+    helperPath: root.helperPath
+    translations: strings
+    onProcessGone: function(pid) {
+      root.procs = root.procs.filter(function(p) { return p.pid !== pid })
+    }
   }
 
-  Timer { id: noticeTimer; interval: 5000; repeat: false; onTriggered: root.killNotice = "" }
   Timer { id: warmup; interval: 600; repeat: false; onTriggered: root.refresh() }
   Timer { interval: root.intervalMs; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.refresh() }
   Timer { interval: Math.max(3000, root.intervalMs); running: root.opened && !root.procsHeld; repeat: true; onTriggered: root.refreshProcs() }
@@ -239,12 +204,16 @@ Panel {
         glyph: root.chipGlyph
         value: root.pct(root.stats.cpu)
         tint: comboButton.foreground
+        bar: root.bar
+        fontFamily: root.fontFamily
       }
 
       BarStat {
         glyph: root.memGlyph
         value: root.pct(root.stats.memFraction)
         tint: comboButton.foreground
+        bar: root.bar
+        fontFamily: root.fontFamily
       }
     }
   }
@@ -285,7 +254,7 @@ Panel {
     content: PanelKeyCatcher {
       anchors.fill: parent
       implicitHeight: column.implicitHeight
-      onCloseRequested: killDialog.opened ? root.cancelKill() : root.close()
+      onCloseRequested: killDialog.opened ? killer.cancel() : root.close()
       onTabRequested: function(direction) {
         if (killDialog.opened) killDialog.selectedIndex = 1 - killDialog.selectedIndex
         else root.switchPanel(direction)
@@ -295,8 +264,8 @@ Panel {
       }
       onActivateRequested: {
         if (!killDialog.opened) return
-        if (killDialog.selectedIndex === 0) root.cancelKill()
-        else root.confirmKill()
+        if (killDialog.selectedIndex === 0) killer.cancel()
+        else killer.confirm()
       }
 
       // Cancel is the default, so a stray Enter never stops anything.
@@ -304,17 +273,17 @@ Panel {
         id: killDialog
         anchors.fill: parent
         z: 10
-        opened: root.killTarget !== null && !killProc.running
+        opened: killer.target !== null && !killer.running
         selectedIndex: 0
         foreground: root.fg
         fontFamily: root.fontFamily
-        confirmText: strings.t(root.killForce ? "killForce" : "killStop")
-        message: root.killTarget
-          ? strings.t(root.killForce ? "killForceConfirm" : "killConfirm").arg(root.killTarget.pid).arg(root.killTarget.name)
+        confirmText: strings.t(killer.force ? "killForce" : "killStop")
+        message: killer.target
+          ? strings.t(killer.force ? "killForceConfirm" : "killConfirm").arg(killer.target.pid).arg(killer.target.name)
           : ""
         onOpenedChanged: if (opened) selectedIndex = 0
-        onCanceled: root.cancelKill()
-        onConfirmed: root.confirmKill()
+        onCanceled: killer.cancel()
+        onConfirmed: killer.confirm()
       }
 
       Column {
@@ -339,11 +308,15 @@ Panel {
             : ""
           iconComponent: PlainText {
             text: root.chipGlyph
+            color: root.fg
+            font.family: root.fontFamily
             font.pixelSize: Style.font.display
           }
         }
 
         Meter {
+          foreground: root.fg
+          fontFamily: root.fontFamily
           label: strings.t("cpu")
           value: root.pct(root.stats.cpu)
           fraction: root.stats.cpu
@@ -351,6 +324,8 @@ Panel {
         }
 
         Meter {
+          foreground: root.fg
+          fontFamily: root.fontFamily
           label: strings.t("memory")
           value: root.memText(root.stats.memUsedKb, root.stats.memTotalKb)
           fraction: root.stats.memFraction
@@ -358,6 +333,8 @@ Panel {
         }
 
         Meter {
+          foreground: root.fg
+          fontFamily: root.fontFamily
           visible: !isNaN(root.stats.swapTotalKb)
           label: strings.t("swap")
           value: root.stats.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(root.stats.swapUsedKb, root.stats.swapTotalKb)
@@ -366,6 +343,8 @@ Panel {
         }
 
         Meter {
+          foreground: root.fg
+          fontFamily: root.fontFamily
           visible: !isNaN(root.stats.cpuTemp)
           label: strings.t("cpuTemp")
           value: root.deg(root.stats.cpuTemp)
@@ -374,6 +353,8 @@ Panel {
         }
 
         Meter {
+          foreground: root.fg
+          fontFamily: root.fontFamily
           visible: !isNaN(root.stats.gpuTemp)
           label: strings.t("gpuTemp")
           value: root.deg(root.stats.gpuTemp)
@@ -388,6 +369,8 @@ Panel {
           spacing: Style.space(8)
 
           ProcRow {
+            foreground: root.fg
+            fontFamily: root.fontFamily
             header: true
             name: strings.t("process")
             cpu: strings.t("cpu")
@@ -397,13 +380,17 @@ Panel {
           PlainText {
             visible: !root.procsLoaded
             text: strings.t("loading")
+            color: root.fg
+            font.family: root.fontFamily
             opacity: 0.6
             font.pixelSize: Style.font.bodySmall
           }
 
           PlainText {
-            visible: root.killNotice !== ""
-            text: root.killNotice
+            visible: killer.notice !== ""
+            text: killer.notice
+            color: root.fg
+            font.family: root.fontFamily
             opacity: 0.7
             elide: Text.ElideRight
             width: parent.width
@@ -434,196 +421,18 @@ Panel {
                 model: root.procs
                 ProcRow {
                   required property var modelData
+                  foreground: root.fg
+                  fontFamily: root.fontFamily
                   name: modelData.name
                   cpu: strings.t("percent").arg(Commons.I18n.formatNumber(modelData.cpu, 1))
                   mem: root.pct(modelData.mem / 100)
                   killable: modelData.killable
-                  onKillRequested: root.requestKill(modelData)
+                  onKillRequested: killer.request(modelData)
                 }
               }
             }
           }
         }
-      }
-    }
-  }
-
-  // ---------- local components ----------
-
-  component PlainText: Text {
-    textFormat: Text.PlainText
-    color: root.fg
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-  }
-
-  // An icon drawn the way Omarchy draws its bar icons, with its reading beside it.
-  // Measuring every digit as "0" means the width only changes when a reading
-  // gains or loses a digit, so the bar doesn't jitter.
-  component BarStat: Item {
-    id: stat
-    property string glyph: ""
-    property string value: ""
-    property color tint: root.fg
-
-    implicitWidth: Style.bar.iconCanvas + Style.space(3) + Math.ceil(valueSlot.advanceWidth)
-    implicitHeight: Style.bar.iconCanvas
-
-    Behavior on tint {
-      enabled: !root.bar || root.bar.foregroundAnimationEnabled
-      ColorAnimation { duration: Style.duration(160) }
-    }
-
-    OpticalGlyph {
-      width: Style.bar.iconCanvas
-      height: Style.bar.iconCanvas
-      text: stat.glyph
-      fontFamily: root.fontFamily
-      fontSize: Style.bar.iconFont
-      paintedSize: Style.bar.iconSize
-      color: stat.tint
-    }
-
-    TextMetrics {
-      id: valueSlot
-      font: valueText.font
-      text: stat.value.replace(/\d/g, "0")
-    }
-
-    FontMetrics {
-      id: valueMetrics
-      font: valueText.font
-    }
-
-    PlainText {
-      id: valueText
-      x: Style.bar.iconCanvas + Style.space(3)
-      y: (parent.height - height) / 2
-        + (valueMetrics.descent - valueMetrics.ascent + valueMetrics.tightBoundingRect("0").height) / 2
-      text: stat.value
-      color: stat.tint
-      renderType: Text.NativeRendering
-    }
-  }
-
-  component Meter: Column {
-    property string label: ""
-    property string value: ""
-    property real fraction: 0
-    property color tint: root.fg
-
-    width: parent.width
-    spacing: Style.space(6)
-
-    Item {
-      width: parent.width
-      implicitHeight: Math.max(meterLabel.implicitHeight, meterValue.implicitHeight)
-
-      PlainText {
-        id: meterLabel
-        anchors.left: parent.left
-        text: label
-        opacity: 0.6
-        font.pixelSize: Style.font.bodySmall
-      }
-
-      PlainText {
-        id: meterValue
-        anchors.right: parent.right
-        text: value
-        color: tint
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-      }
-    }
-
-    Item {
-      width: parent.width
-      implicitHeight: Style.space(6)
-
-      Rectangle {
-        id: track
-        anchors.fill: parent
-        radius: height / 2
-        color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.12)
-      }
-
-      Rectangle {
-        anchors.left: track.left
-        anchors.verticalCenter: track.verticalCenter
-        height: track.height
-        radius: track.radius
-        color: tint
-        width: isNaN(fraction) ? 0 : Math.max(track.height, track.width * Math.max(0, Math.min(1, fraction)))
-
-        Behavior on width { NumberAnimation { duration: Style.duration(240); easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: Style.duration(200) } }
-      }
-    }
-  }
-
-  component ProcRow: Row {
-    id: procRow
-    signal killRequested()
-    property bool killable: false
-    readonly property real killSlot: Style.space(18)
-    property bool header: false
-    property string name: ""
-    property string cpu: ""
-    property string mem: ""
-    readonly property real numWidth: Style.space(52)
-    // Keeps the numbers clear of the scrollbar, in the header row too.
-    readonly property real scrollbarInset: Style.space(10)
-
-    width: parent.width
-    spacing: Style.space(8)
-    opacity: header ? 0.6 : 1
-
-    PlainText {
-      width: parent.width - parent.numWidth * 2 - parent.killSlot - parent.spacing * 3 - parent.scrollbarInset
-      text: name
-      elide: Text.ElideRight
-      font.pixelSize: Style.font.bodySmall
-    }
-
-    PlainText {
-      width: parent.numWidth
-      horizontalAlignment: Text.AlignRight
-      text: cpu
-      font.pixelSize: Style.font.bodySmall
-    }
-
-    PlainText {
-      width: parent.numWidth
-      horizontalAlignment: Text.AlignRight
-      text: mem
-      font.pixelSize: Style.font.bodySmall
-    }
-
-    HoverHandler { id: rowHover }
-
-    // The slot is always reserved, so the columns don't shift on hover.
-    Item {
-      width: parent.killSlot
-      height: killGlyph.implicitHeight
-
-      PlainText {
-        id: killGlyph
-        anchors.centerIn: parent
-        text: String.fromCodePoint(0xF0156)
-        visible: procRow.killable && rowHover.hovered
-        color: killMouse.containsMouse ? Commons.Color.urgent : root.fg
-        font.pixelSize: Style.font.body
-      }
-
-      MouseArea {
-        id: killMouse
-        anchors.fill: parent
-        anchors.margins: -Style.space(3)
-        enabled: procRow.killable && rowHover.hovered
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: procRow.killRequested()
       }
     }
   }
