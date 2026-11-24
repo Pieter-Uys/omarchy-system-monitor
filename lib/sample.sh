@@ -98,10 +98,13 @@ gpu_temp() {
     line=$(timeout 2 nvidia-smi -i "$awake" --query-gpu=temperature.gpu,utilization.gpu --format=csv,noheader,nounits 2>/dev/null)
     line=${line%%$'\n'*}
     line=${line//[[:space:]]/}
-    # "<temp>,<load>"; the load is left out when the driver reports it as [N/A].
-    if [[ $line =~ ^([0-9]{1,3})(,(.*))?$ ]]; then
-      printf 'gputemp\t%d\n' "$((BASH_REMATCH[1] * 1000))"
-      emit_load "${BASH_REMATCH[3]}"
+    # "<temp>,<load>". Either field can be [N/A] on a card that doesn't report it; each one
+    # is printed only when it's a number, so a card without a temperature still shows its load.
+    if [[ $line =~ ^([0-9]{1,3}|\[N/A\])(,(.*))?$ ]]; then
+      # Copied out first: the next [[ =~ ]] replaces BASH_REMATCH.
+      local temp=${BASH_REMATCH[1]} load=${BASH_REMATCH[3]:-}
+      [[ $temp =~ ^[0-9]+$ ]] && printf 'gputemp\t%d\n' "$((temp * 1000))"
+      emit_load "$load"
       return
     fi
   fi

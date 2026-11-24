@@ -145,7 +145,8 @@ function parseProcs(raw) {
 // processes read as one line. A program can be stopped only if every one of its processes can.
 // Sorted by "cpu" or "memory", busiest first, and cut to the top `limit`.
 function groupProcs(procs, sortKey, limit) {
-  var byName = {}, groups = []
+  // No prototype, so a program named "constructor" or "__proto__" is just another key.
+  var byName = Object.create(null), groups = []
   for (const p of procs) {
     var g = byName[p.name]
     if (!g) {
@@ -203,7 +204,7 @@ function parseAlive(raw, asked) {
 
 // Programs shutting down stay pinned at the top, even if they'd drop out of the top rows.
 function mergeStopping(groups, stopping) {
-  var out = [], pinned = {}, live = {}, i
+  var out = [], pinned = Object.create(null), live = Object.create(null), i
   for (i = 0; i < groups.length; i++) live[groups[i].name] = groups[i]
   for (i = 0; i < stopping.length; i++) {
     var s = stopping[i], now = live[s.name] || s

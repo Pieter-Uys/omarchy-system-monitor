@@ -98,6 +98,19 @@ test("processes sharing a name add up to one row per program", () => {
   assert.deepStrictEqual(plain(rows[0].members), [{ pid: 1, start: "10" }, { pid: 2, start: "20" }, { pid: 4, start: "40" }])
 })
 
+test("program names that match built-in object properties group like any other", () => {
+  const names = ["constructor", "__proto__", "toString", "hasOwnProperty"]
+  const procs = names.flatMap((n, i) => [proc(i * 2 + 1, n, 1, 100), proc(i * 2 + 2, n, 1, 100)])
+  const rows = M.groupProcs(procs, "memory")
+  assert.deepStrictEqual(Array.from(rows, r => [r.name, r.count]).sort(), names.map(n => [n, 2]).sort())
+  assert.strictEqual(({}).count, undefined, "nothing was written onto Object.prototype")
+  const stopping = [{ name: "__proto__", members: [{ pid: 3, start: "30" }], count: 2, cpu: 0, memKb: 0, forced: false, since: 1 }]
+  const merged = M.mergeStopping(rows, stopping)
+  assert.deepStrictEqual(Array.from(merged, r => [r.name, r.stopping]).filter(r => r[1]), [["__proto__", true]])
+  assert.strictEqual(merged.length, 4)
+  assert.strictEqual(merged.find(r => r.name === "constructor").stopping, false)
+})
+
 test("a program can be stopped only if every one of its processes can", () => {
   const rows = M.groupProcs([proc(1, "app", 1, 1), proc(2, "app", 1, 1, false), proc(3, "solo", 1, 1)], "memory")
   assert.deepStrictEqual(Array.from(rows, r => [r.name, r.killable]), [["app", false], ["solo", true]])
