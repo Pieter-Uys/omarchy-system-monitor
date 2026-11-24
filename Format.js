@@ -4,7 +4,7 @@
 // JavaScript, so the tests can run it without the shell. Called from inside QML bindings, so
 // a language switch still re-renders everything.
 
-var DASH = "—"
+const DASH = "—"
 
 function gib(kb) {
   return kb / 1048576
@@ -33,7 +33,7 @@ function memText(fx, usedKb, totalKb) {
 }
 
 function sizeText(fx, kb) {
-  var z = size(kb)
+  const z = size(kb)
   if (!z) return DASH
   return fx.t(z.unit === "GiB" ? "sizeGiB" : "sizeMiB").arg(fx.num(z.value, z.decimals))
 }

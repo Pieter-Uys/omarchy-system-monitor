@@ -146,9 +146,11 @@ stop_proc() {
 # For each <pid> <start> pair still running, prints: alive <pid>. Always ends with ok,
 # so a failed check can't be mistaken for every process having exited.
 check_procs() {
+  local pid start
   while (($# >= 2)); do
-    if [[ $1 =~ ^[1-9][0-9]{0,9}$ && $2 =~ ^[1-9][0-9]{0,19}$ ]] && is_same_process "$1" "$2"; then
-      printf 'alive\t%s\n' "$1"
+    pid=$1 start=$2
+    if [[ $pid =~ ^[1-9][0-9]{0,9}$ && $start =~ ^[1-9][0-9]{0,19}$ ]] && is_same_process "$pid" "$start"; then
+      printf 'alive\t%s\n' "$pid"
     fi
     shift 2
   done
