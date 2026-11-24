@@ -10,3 +10,5 @@ First release.
 - Processes the desktop session depends on, such as Hyprland, `start-hyprland`, the shell, `hyprlock` and the GNOME keyring, can't be stopped from the panel.
 - With a graphics card, the GPU temperature is the card's, including NVIDIA cards on NVIDIA's own driver (read with `nvidia-smi`), rather than the graphics built into the CPU. A powered-down card shows as **Asleep** and is never woken up to be read.
 - Everything is read locally from `/proc`, `/sys`, `top` and `nvidia-smi`. No network access.
+
+After installing or updating, restart the shell (`omarchy restart shell`) so it loads the new panel. Until then the shell keeps the panel it already had loaded, and the GPU temperature doesn't appear.
