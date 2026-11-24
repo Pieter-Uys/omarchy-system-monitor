@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
 - The process list now shows programs, not processes: processes sharing a name are added up into one row, so a browser's dozens of processes read as one line (`brave ×33`). Stopping a program stops all of its processes, with the same confirmation and force-kill steps as before.
-- Memory shows as a size (`840 MiB`, `5.9 GiB`) rather than a percentage.
+- Memory shows as a size (`790 MiB`, `2.6 GiB`) rather than a percentage. For a program split across several processes it counts memory they share once, not once per process, so a browser reads as what closing it would free rather than several times that.
 - Click the **CPU** or **Memory** heading to sort by it. The list now starts sorted by memory.
 - The list shows the 12 heaviest programs, so it fits without much scrolling.
 - The **Stop** heading is gone; the stop button on each row is enough.

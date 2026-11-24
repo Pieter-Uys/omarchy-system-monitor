@@ -191,6 +191,24 @@ test("only --force ends a process that ignores the graceful stop", () => {
   })
 })
 
+// Proportional memory in KiB, as /proc reports it.
+const pssOf = pid => Number(/^Pss:\s+(\d+) kB$/m.exec(fs.readFileSync(`/proc/${pid}/smaps_rollup`, "utf8"))[1])
+
+test("--top reads proportional memory for your processes that share a name", () => {
+  withProcess("sleep", ["30"], "sleep", a => {
+    withProcess("sleep", ["30"], "sleep", b => {
+      const r = run(["--top"], [HEADER, "", HEADER, row(a, perCore(0.1), "0.1", "sleep"), row(b, perCore(0.1), "0.1", "sleep")].join("\n"))
+      const mem = r.stdout.trimEnd().split("\n").map(l => Number(l.split("\t")[3]))
+      // Two copies of sleep share most of their pages, so each one's share is below its resident
+      // size. Shares shift by a few KiB as other processes map the same libraries, so allow for that.
+      for (const [i, pid] of [a, b].entries()) {
+        assert.ok(Math.abs(mem[i] - pssOf(pid)) <= 16, `${mem[i]} vs Pss ${pssOf(pid)}`)
+        assert.ok(mem[i] > 0 && mem[i] < rssOf(pid), `${mem[i]} vs Rss ${rssOf(pid)}`)
+      }
+    })
+  })
+})
+
 test("one --kill stops every process of a program", () => {
   withProcess("sleep", ["30"], "sleep", a => {
     withProcess("sleep", ["30"], "sleep", b => {

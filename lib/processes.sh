@@ -33,27 +33,40 @@ is_killable() {
   read_proc_stat "$1" && [[ $proc_state != Z ]]
 }
 
-# Sets proc_rss to a process's resident memory in KiB, from /proc/<pid>/statm, or 0.
-# Sets a variable rather than printing, so a long list costs no subshells.
-read_rss() {
-  local statm fields
-  proc_rss=0
+# Sets proc_mem to a process's memory in KiB, or 0 if it can't be read.
+# For one of your processes that shares its name with others ($2 is 1), this is the
+# proportional set size (Pss), which splits memory shared between processes among them, so a
+# browser's dozens of processes add up to what closing it would free. Pss is costly to read
+# for a process with a lot of memory mapped (a game can take a tenth of a second), and a
+# process alone under its name has little to share, so everything else reads resident memory
+# from statm. Sets a variable rather than printing, so a long list costs no subshells.
+read_mem() {
+  local key value rest statm fields
+  proc_mem=0
+  if [[ $2 == 1 && -O /proc/$1 ]]; then
+    while read -r key value rest; do
+      if [[ $key == Pss: ]]; then
+        [[ $value =~ ^[0-9]{1,15}$ ]] && proc_mem=$value && return
+        break
+      fi
+    done 2>/dev/null < "/proc/$1/smaps_rollup"
+  fi
   { statm=$(<"/proc/$1/statm"); } 2>/dev/null || return
   read -ra fields <<< "$statm"
-  [[ ${fields[1]:-} =~ ^[0-9]{1,15}$ ]] && proc_rss=$((fields[1] * page_kb))
+  [[ ${fields[1]:-} =~ ^[0-9]{1,15}$ ]] && proc_mem=$((fields[1] * page_kb))
 }
 
-# Adds each process's resident memory (KiB) and whether it can be stopped.
+# Adds each process's memory (KiB) and whether it can be stopped.
 mark_killable() {
-  local tag pid cpu name
+  local tag pid cpu multi name
   page_kb=$(($(getconf PAGESIZE 2>/dev/null || echo 4096) / 1024))
   ((page_kb > 0)) || page_kb=4
-  while IFS=$'\t' read -r tag pid cpu name; do
-    read_rss "$pid"
+  while IFS=$'\t' read -r tag pid cpu multi name; do
+    read_mem "$pid" "$multi"
     if is_killable "$pid"; then
-      printf '%s\t%s\t%s\t%s\t1\t%s\t%s\n' "$tag" "$pid" "$cpu" "$proc_rss" "$proc_start" "$name"
+      printf '%s\t%s\t%s\t%s\t1\t%s\t%s\n' "$tag" "$pid" "$cpu" "$proc_mem" "$proc_start" "$name"
     else
-      printf '%s\t%s\t%s\t%s\t0\t0\t%s\n' "$tag" "$pid" "$cpu" "$proc_rss" "$name"
+      printf '%s\t%s\t%s\t%s\t0\t0\t%s\n' "$tag" "$pid" "$cpu" "$proc_mem" "$name"
     fi
   done
 }
@@ -75,8 +88,12 @@ top_procs() {
       name = $12
       for (i = 13; i <= NF; i++) name = name " " $i
       if (name == "top") next
-      printf "proc\t%s\t%.1f\t%s\n", $1, $9 / (cores > 0 ? cores : 1), name
       n++
+      pid[n] = $1; cpu[n] = $9 / (cores > 0 ? cores : 1); comm[n] = name; seen[name]++
+    }
+    # Printed at the end, once each name is known to be shared or not.
+    END {
+      for (i = 1; i <= n; i++) printf "proc\t%s\t%.1f\t%d\t%s\n", pid[i], cpu[i], (seen[comm[i]] > 1), comm[i]
     }
   ' /proc/stat - | mark_killable
   rm -rf -- "$cfg"
