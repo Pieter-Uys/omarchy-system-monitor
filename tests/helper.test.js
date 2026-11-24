@@ -106,14 +106,15 @@ function waitUntilGone(pid) {
 }
 
 // Every process stopped here is one this test spawned itself.
+// It runs in its own process group, so cleanup also ends anything it started.
 function withProcess(command, args, comm, fn) {
-  const child = spawn(command, args, { stdio: "ignore" })
+  const child = spawn(command, args, { stdio: "ignore", detached: true })
   try {
     for (let i = 0; i < 200 && readComm(child.pid) !== comm; i++) sleepMs(10)
     assert.strictEqual(readComm(child.pid), comm)
     fn(child.pid)
   } finally {
-    child.kill("SIGKILL")
+    try { process.kill(-child.pid, "SIGKILL") } catch {}
   }
 }
 
@@ -124,15 +125,17 @@ test("--top marks your own process as stoppable", () => {
   })
 })
 
-// Runs fn with a copy of sleep started under the given file name, which becomes its comm
-// (cut to 15 characters, as the kernel does).
+// Runs fn with a copy of bash started under the given file name, which becomes its comm
+// (cut to 15 characters, as the kernel does). bash rather than sleep, because sleep can be
+// one binary shared by many commands that picks which to be from its own name.
+// The trailing ":" keeps bash from replacing itself with sleep.
 function withNamedProcess(file, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "system-monitor-test-"))
   try {
     const fake = path.join(dir, file)
-    fs.copyFileSync(fs.realpathSync("/usr/bin/sleep"), fake)
+    fs.copyFileSync(fs.realpathSync("/bin/bash"), fake)
     fs.chmodSync(fake, 0o755)
-    withProcess(fake, ["30"], file.slice(0, 15), fn)
+    withProcess(fake, ["-c", "sleep 30; :"], file.slice(0, 15), fn)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
