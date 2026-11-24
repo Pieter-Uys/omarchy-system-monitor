@@ -306,6 +306,18 @@ test("an AMD card wins over CPU graphics given more memory, whichever is listed 
   assert.deepStrictEqual(temps(["--gpu"], fakeSys([smallCard, AMD_CARD])), ["gputemp\t66000"])
 })
 
+test("CPU graphics without the northbridge sensor still lose to a card if they have 1 GiB or less", () => {
+  const oldKernelIgpu = { ...AMD_IGPU, files: {} }
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([oldKernelIgpu, AMD_CARD])), ["gputemp\t66000"])
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([AMD_CARD, oldKernelIgpu])), ["gputemp\t66000"])
+})
+
+test("a radeon GPU, which reports no memory, is read when it's the only one", () => {
+  const radeon = { name: "radeon", temps: { 1: "58000" } }
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([radeon])), ["gputemp\t58000"])
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([radeon, AMD_CARD])), ["gputemp\t66000"])
+})
+
 test("the CPU's package sensor is preferred, and a missing or garbled reading is left out", () => {
   const k10 = { name: "k10temp", temps: { 1: "51000", 3: "58500" }, labels: { 1: "Tccd1", 3: "Tctl" } }
   assert.deepStrictEqual(temps([], fakeSys([{ name: "nvme", temps: { 1: "40000" } }, k10])), ["cputemp\t58500"])
