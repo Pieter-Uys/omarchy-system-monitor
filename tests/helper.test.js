@@ -204,7 +204,7 @@ test("--kill rejects bad input and reports a missing process", () => {
 })
 
 // A fake /sys with the given hwmon sensors and NVIDIA cards.
-// hwmon: [{ name, temps: { 1: "45000" }, labels: { 1: "edge" }, vram, asleep }]
+// hwmon: [{ name, temps: { 1: "45000" }, labels: { 1: "edge" }, files: { in1_label: "vddnb" }, vram, asleep }]
 // nvidia: [{ bus, asleep }]
 function fakeSys(hwmon = [], nvidia = []) {
   const sys = fs.mkdtempSync(path.join(os.tmpdir(), "system-monitor-sys-"))
@@ -219,6 +219,7 @@ function fakeSys(hwmon = [], nvidia = []) {
     fs.writeFileSync(path.join(dir, "name"), h.name + "\n")
     for (const [n, v] of Object.entries(h.temps || {})) fs.writeFileSync(path.join(dir, `temp${n}_input`), v + "\n")
     for (const [n, v] of Object.entries(h.labels || {})) fs.writeFileSync(path.join(dir, `temp${n}_label`), v + "\n")
+    for (const [f, v] of Object.entries(h.files || {})) fs.writeFileSync(path.join(dir, f), v + "\n")
     const dev = path.join(sys, "devices", `hwmon${i}`)
     device(dev, h)
     fs.symlinkSync(dev, path.join(dir, "device"))
@@ -245,7 +246,8 @@ function temps(args, sys, stubs) {
   }
 }
 
-const AMD_IGPU = { name: "amdgpu", temps: { 1: "47000" }, labels: { 1: "edge" }, vram: 536870912 }
+// amdgpu gives only graphics built into the CPU a northbridge voltage, in1 ("vddnb").
+const AMD_IGPU = { name: "amdgpu", temps: { 1: "47000" }, labels: { 1: "edge" }, files: { in1_label: "vddnb" }, vram: 536870912 }
 const AMD_CARD = { name: "amdgpu", temps: { 1: "66000" }, labels: { 1: "edge" }, vram: 8589934592 }
 
 test("the GPU is read only when asked for", () => {
@@ -290,6 +292,30 @@ test("an AMD card wins over AMD graphics in the CPU, whichever is listed first",
   assert.deepStrictEqual(temps(["--gpu"], fakeSys([AMD_IGPU, AMD_CARD])), ["gputemp\t66000"])
   assert.deepStrictEqual(temps(["--gpu"], fakeSys([AMD_CARD, AMD_IGPU])), ["gputemp\t66000"])
   assert.deepStrictEqual(temps(["--gpu"], fakeSys([{ ...AMD_CARD, asleep: true }, AMD_IGPU])), ["gpusleep\t1"])
+})
+
+test("an AMD card wins over CPU graphics given more memory, whichever is listed first", () => {
+  const GiB = 1073741824
+  const bigIgpu = { ...AMD_IGPU, temps: { 1: "52000" }, vram: 8 * GiB }
+  const smallCard = { ...AMD_CARD, temps: { 1: "71000" }, vram: 4 * GiB }
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([bigIgpu, smallCard])), ["gputemp\t71000"])
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([smallCard, bigIgpu])), ["gputemp\t71000"])
+  // CPU graphics alone are still reported, whatever memory they have.
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([bigIgpu])), ["gputemp\t52000"])
+  // Between two cards, the one with more memory.
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([smallCard, AMD_CARD])), ["gputemp\t66000"])
+})
+
+test("CPU graphics without the northbridge sensor still lose to a card if they have 1 GiB or less", () => {
+  const oldKernelIgpu = { ...AMD_IGPU, files: {} }
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([oldKernelIgpu, AMD_CARD])), ["gputemp\t66000"])
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([AMD_CARD, oldKernelIgpu])), ["gputemp\t66000"])
+})
+
+test("a radeon GPU, which reports no memory, is read when it's the only one", () => {
+  const radeon = { name: "radeon", temps: { 1: "58000" } }
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([radeon])), ["gputemp\t58000"])
+  assert.deepStrictEqual(temps(["--gpu"], fakeSys([radeon, AMD_CARD])), ["gputemp\t66000"])
 })
 
 test("the CPU's package sensor is preferred, and a missing or garbled reading is left out", () => {

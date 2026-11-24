@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- On a machine with an AMD card and AMD graphics built into the CPU, the GPU temperature is now the card's even when the BIOS gives the CPU's graphics more memory than the card has. Built-in graphics are now recognised by the sensor only they have, not by memory size.
+
 ## 1.0.0
 
 First release.

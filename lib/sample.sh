@@ -106,19 +106,26 @@ gpu_temp() {
   # An NVIDIA card that couldn't be read shows no reading, rather than the CPU's graphics.
   [[ -n $awake ]] && return
 
-  # Otherwise the hwmon GPU sensors: nouveau and Intel's xe only drive dedicated cards here,
-  # and an AMD GPU with more than 1 GiB of its own memory is a card rather than a CPU's graphics.
+  # Otherwise the hwmon GPU sensors, ranked card first:
+  #   nouveau and Intel's xe only drive dedicated cards here.
+  #   amdgpu gives only graphics built into the CPU a northbridge voltage (in1, "vddnb"),
+  #   however much memory the BIOS sets aside for them. 1 GiB or less of memory also marks
+  #   CPU graphics, for kernels from before that sensor.
+  #   The older radeon driver shows neither sign, so a radeon GPU ranks lowest.
+  # Only amdgpu reports its memory, so it settles ties between amdgpu cards; otherwise the
+  # first one listed wins.
   for h in "$sys"/class/hwmon/hwmon*; do
     [[ -r $h/name ]] || continue
     name=$(<"$h/name")
     vram=0
     case $name in
       nouveau | xe) rank=3 ;;
-      amdgpu | radeon)
+      amdgpu)
         { vram=$(<"$h/device/mem_info_vram_total"); } 2>/dev/null || vram=0
         [[ $vram =~ ^[0-9]{1,20}$ ]] || vram=0
-        if ((vram > 1073741824)); then rank=2; else rank=1; fi
+        if [[ -e $h/in1_label ]] || ((vram <= 1073741824)); then rank=1; else rank=2; fi
         ;;
+      radeon) rank=0 ;;
       *) continue ;;
     esac
     if ((rank > best_rank || (rank == best_rank && vram > best_vram))); then
