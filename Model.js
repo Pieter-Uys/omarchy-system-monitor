@@ -3,7 +3,9 @@
 
 var MAX_LINES = 64
 var MAX_FIELDS = 8
-var MAX_PROCS = 50
+// The helper lists every process so each program's can be added up; the panel shows the top few.
+var MAX_PROCS = 4000
+var MAX_ROWS = 12
 var MAX_NAME = 48
 
 function toInt(value) {
@@ -119,27 +121,60 @@ function cleanName(name) {
 }
 
 // CPU arrives from the helper as a share of the whole machine, so 100 is the ceiling.
+// Memory arrives as resident KiB.
 function parseProcs(raw) {
   var out = []
   var lines = String(raw || "").split("\n")
-  for (var i = 0; i < lines.length && i < MAX_LINES && out.length < MAX_PROCS; i++) {
+  for (var i = 0; i < lines.length && i < MAX_PROCS + 1 && out.length < MAX_PROCS; i++) {
     var p = lines[i].split("\t")
     if (p.length < 7 || p[0] !== "proc") continue
     if (!/^\d{1,10}$/.test(p[1])) continue
-    var cpu = toNumber(p[2]), mem = toNumber(p[3])
-    if (isNaN(cpu) || isNaN(mem)) continue
+    var cpu = toNumber(p[2]), memKb = toInt(p[3])
+    if (isNaN(cpu) || isNaN(memKb) || memKb < 0) continue
     if (!/^[01]$/.test(p[4]) || !/^\d{1,20}$/.test(p[5])) continue
     var name = cleanName(p.slice(6).join(" "))
     if (name === "") continue
-    out.push({ pid: parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), mem: clamp(mem, 0, 100), killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
+    out.push({ pid: parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), memKb: memKb, killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
   }
   return out
+}
+
+// One row per program: processes sharing a name are added up, so a browser's dozens of
+// processes read as one line. A program can be stopped only if every one of its processes can.
+// Sorted by "cpu" or "memory", busiest first, and cut to the top `limit`.
+function groupProcs(procs, sortKey, limit) {
+  var byName = {}, groups = []
+  for (var i = 0; i < procs.length; i++) {
+    var p = procs[i], g = byName[p.name]
+    if (!g) {
+      g = byName[p.name] = { name: p.name, count: 0, cpu: 0, memKb: 0, killable: true, members: [] }
+      groups.push(g)
+    }
+    g.count++
+    g.cpu += p.cpu
+    g.memKb += p.memKb
+    g.killable = g.killable && p.killable
+    g.members.push({ pid: p.pid, start: p.start })
+  }
+  var key = sortKey === "cpu" ? "cpu" : "memKb", other = key === "cpu" ? "memKb" : "cpu"
+  groups.sort(function(a, b) {
+    return b[key] - a[key] || b[other] - a[other] || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  })
+  for (i = 0; i < groups.length; i++) groups[i].cpu = clamp(groups[i].cpu, 0, 100)
+  return groups.slice(0, limit === undefined ? MAX_ROWS : limit)
+}
+
+// { value, unit } for a size in KiB: whole MiB below 1 GiB, else GiB to one decimal.
+function size(kb) {
+  if (isNaN(kb) || kb < 0) return null
+  if (kb < 1048576) return { value: Math.max(0, Math.round(kb / 1024)), decimals: 0, unit: "MiB" }
+  return { value: kb / 1048576, decimals: 1, unit: "GiB" }
 }
 
 // Anything unexpected from the helper counts as refused.
 function parseKillResult(raw) {
   var s = String(raw || "").trim()
-  return ["sent", "gone", "changed", "refused"].indexOf(s) >= 0 ? s : "refused"
+  return ["sent", "gone", "refused"].indexOf(s) >= 0 ? s : "refused"
 }
 
 // The PIDs a --check of `asked` processes found running, or null if the check didn't finish.
@@ -157,22 +192,21 @@ function parseAlive(raw, asked) {
   return alive
 }
 
-// Processes shutting down stay pinned at the top, even if they'd drop out of the busiest 50.
-function mergeStopping(procs, stopping) {
-  var out = [], pinned = {}, i
-  var live = {}
-  for (i = 0; i < procs.length; i++) live[procs[i].pid + ":" + procs[i].start] = procs[i]
+// Programs shutting down stay pinned at the top, even if they'd drop out of the top rows.
+function mergeStopping(groups, stopping) {
+  var out = [], pinned = {}, live = {}, i
+  for (i = 0; i < groups.length; i++) live[groups[i].name] = groups[i]
   for (i = 0; i < stopping.length; i++) {
-    var s = stopping[i], key = s.pid + ":" + s.start, now = live[key] || s
-    pinned[key] = true
-    out.push({ pid: s.pid, start: s.start, name: s.name, cpu: now.cpu, mem: now.mem, killable: false,
-      stopping: true, forced: s.forced, since: s.since })
+    var s = stopping[i], now = live[s.name] || s
+    pinned[s.name] = true
+    out.push({ name: s.name, count: now.count, cpu: now.cpu, memKb: now.memKb, killable: false,
+      members: s.members, stopping: true, forced: s.forced, since: s.since })
   }
-  for (i = 0; i < procs.length; i++) {
-    var p = procs[i]
-    if (pinned[p.pid + ":" + p.start]) continue
-    out.push({ pid: p.pid, start: p.start, name: p.name, cpu: p.cpu, mem: p.mem, killable: p.killable,
-      stopping: false, forced: false, since: 0 })
+  for (i = 0; i < groups.length; i++) {
+    var g = groups[i]
+    if (pinned[g.name]) continue
+    out.push({ name: g.name, count: g.count, cpu: g.cpu, memKb: g.memKb, killable: g.killable,
+      members: g.members, stopping: false, forced: false, since: 0 })
   }
   return out
 }

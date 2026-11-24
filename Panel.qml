@@ -36,7 +36,10 @@ Panel {
   // Hold the list still while it's being aimed at, so a row can't move under the cursor.
   readonly property bool procsHeld: procListHovered || killer.target !== null
 
-  readonly property var procRows: Model.mergeStopping(root.procs, killer.stopping)
+  // "memory" or "cpu", switched by clicking the column heading. Memory first, since that's
+  // usually what you're looking for. Not saved: each session starts on memory.
+  property string sortKey: "memory"
+  readonly property var procRows: Model.mergeStopping(Model.groupProcs(root.procs, root.sortKey), killer.stopping)
 
   readonly property color fg: root.bar ? root.bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
@@ -73,6 +76,16 @@ Panel {
     if (key === "swap") return s.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(s.swapUsedKb, s.swapTotalKb)
     if (key === "gpuTemp" && s.gpuAsleep) return strings.t("gpuAsleep")
     return root.deg(key === "cpuTemp" ? s.cpuTemp : s.gpuTemp)
+  }
+
+  function sizeText(kb) {
+    var z = Model.size(kb)
+    if (!z) return "—"
+    return strings.t(z.unit === "GiB" ? "sizeGiB" : "sizeMiB").arg(Commons.I18n.formatNumber(z.value, z.decimals))
+  }
+
+  function groupName(row) {
+    return row.count > 1 ? strings.t("groupName").arg(row.name).arg(Commons.I18n.formatNumber(row.count)) : row.name
   }
 
   function uptimeText(sec) {
@@ -179,8 +192,8 @@ Panel {
     helperPath: root.helperPath
     translations: strings
     active: root.opened
-    onProcessGone: function(pid) {
-      root.procs = root.procs.filter(function(p) { return p.pid !== pid })
+    onProcessGone: function(name) {
+      root.procs = root.procs.filter(function(p) { return p.name !== name })
     }
   }
 
@@ -303,7 +316,8 @@ Panel {
         fontFamily: root.fontFamily
         confirmText: strings.t(killer.force ? "killForce" : "killStop")
         message: killer.target
-          ? strings.t(killer.force ? "killForceConfirm" : "killConfirm").arg(killer.target.pid).arg(killer.target.name)
+          ? strings.tn(killer.force ? "killForceConfirm" : "killConfirm", killer.target.members.length)
+            .arg(killer.target.name).arg(Commons.I18n.formatNumber(killer.target.members.length))
           : ""
         onOpenedChanged: if (opened) selectedIndex = 0
         onCanceled: killer.cancel()
@@ -369,7 +383,8 @@ Panel {
             name: strings.t("process")
             cpu: strings.t("cpu")
             mem: strings.t("memory")
-            stopText: strings.t("stopColumn")
+            sortKey: root.sortKey
+            onSortRequested: function(key) { root.sortKey = key }
           }
 
           PlainText {
@@ -418,11 +433,10 @@ Panel {
                   required property var modelData
                   foreground: root.fg
                   fontFamily: root.fontFamily
-                  name: modelData.name
+                  name: root.groupName(modelData)
                   cpu: strings.t("percent").arg(Commons.I18n.formatNumber(modelData.cpu, 1))
-                  mem: root.pct(modelData.mem / 100)
+                  mem: root.sizeText(modelData.memKb)
                   killable: modelData.killable
-                  stopText: strings.t("stopColumn")
                   stopping: modelData.stopping
                   forced: modelData.forced
                   forceText: strings.t("killForce")

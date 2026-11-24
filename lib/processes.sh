@@ -33,13 +33,27 @@ is_killable() {
   read_proc_stat "$1" && [[ $proc_state != Z ]]
 }
 
+# Sets proc_rss to a process's resident memory in KiB, from /proc/<pid>/statm, or 0.
+# Sets a variable rather than printing, so a long list costs no subshells.
+read_rss() {
+  local statm fields
+  proc_rss=0
+  { statm=$(<"/proc/$1/statm"); } 2>/dev/null || return
+  read -ra fields <<< "$statm"
+  [[ ${fields[1]:-} =~ ^[0-9]{1,15}$ ]] && proc_rss=$((fields[1] * page_kb))
+}
+
+# Adds each process's resident memory (KiB) and whether it can be stopped.
 mark_killable() {
-  local tag pid cpu mem name
-  while IFS=$'\t' read -r tag pid cpu mem name; do
+  local tag pid cpu name
+  page_kb=$(($(getconf PAGESIZE 2>/dev/null || echo 4096) / 1024))
+  ((page_kb > 0)) || page_kb=4
+  while IFS=$'\t' read -r tag pid cpu name; do
+    read_rss "$pid"
     if is_killable "$pid"; then
-      printf '%s\t%s\t%s\t%s\t1\t%s\t%s\n' "$tag" "$pid" "$cpu" "$mem" "$proc_start" "$name"
+      printf '%s\t%s\t%s\t%s\t1\t%s\t%s\n' "$tag" "$pid" "$cpu" "$proc_rss" "$proc_start" "$name"
     else
-      printf '%s\t%s\t%s\t%s\t0\t0\t%s\n' "$tag" "$pid" "$cpu" "$mem" "$name"
+      printf '%s\t%s\t%s\t%s\t0\t0\t%s\n' "$tag" "$pid" "$cpu" "$proc_rss" "$name"
     fi
   done
 }
@@ -48,6 +62,8 @@ top_procs() {
   # An empty HOME and XDG_CONFIG_HOME keep a personal toprc from reordering top's columns.
   local cfg
   cfg=$(mktemp -d) || return
+  # Every process is listed, not just the busiest, so the panel can add up each program's
+  # processes. The panel does the grouping and keeps only the top few.
   # top's first frame has no time delta (every process reads 0.0), so take a second frame
   # half a second later and keep only that one.
   # top reports 100% per core, so divide by the core count to get a share of the whole CPU,
@@ -55,42 +71,52 @@ top_procs() {
   HOME=$cfg XDG_CONFIG_HOME=$cfg top -b -n2 -d0.5 -w 512 -o %CPU 2>/dev/null | awk '
     NR == FNR { if ($1 ~ /^cpu[0-9]/) cores++; next }
     $1 == "PID" { frame++; n = 0; next }
-    frame == 2 && NF >= 12 && n < 50 {
+    frame == 2 && NF >= 12 && n < 4000 {
       name = $12
       for (i = 13; i <= NF; i++) name = name " " $i
       if (name == "top") next
-      printf "proc\t%s\t%.1f\t%s\t%s\n", $1, $9 / (cores > 0 ? cores : 1), $10, name
+      printf "proc\t%s\t%.1f\t%s\n", $1, $9 / (cores > 0 ? cores : 1), name
       n++
     }
   ' /proc/stat - | mark_killable
   rm -rf -- "$cfg"
 }
 
-# Sends the signal and returns straight away. Prints one word: sent, gone, changed or refused.
+# Signals each <pid> <start> pair, so one confirmation can stop every process of a program.
+# Returns straight away and prints one word: sent if any process was signalled, refused if
+# a running one couldn't be, otherwise gone (all had already exited or had their PID reused).
+# Any malformed argument refuses the whole request before anything is signalled.
 stop_proc() {
-  local pid=${1:-} expected=${2:-} signal=TERM
-  [[ ${3:-} == --force ]] && signal=KILL
-  if [[ ! $pid =~ ^[1-9][0-9]{0,9}$ || ! $expected =~ ^[1-9][0-9]{0,19}$ || $# -gt 3 ]]; then
+  local signal=TERM args=("$@") i sent=0 failed=0
+  if [[ ${args[-1]:-} == --force ]]; then
+    signal=KILL
+    unset 'args[-1]'
+  fi
+  if ((${#args[@]} == 0 || ${#args[@]} % 2 != 0 || ${#args[@]} > 8000)); then
     echo refused
     return
   fi
-  if [[ $# -eq 3 && $3 != --force ]]; then
+  for ((i = 0; i < ${#args[@]}; i += 2)); do
+    if [[ ! ${args[i]} =~ ^[1-9][0-9]{0,9}$ || ! ${args[i + 1]} =~ ^[1-9][0-9]{0,19}$ ]]; then
+      echo refused
+      return
+    fi
+  done
+  for ((i = 0; i < ${#args[@]}; i += 2)); do
+    read_proc_stat "${args[i]}" && [[ $proc_state != Z && $proc_start == "${args[i + 1]}" ]] || continue
+    if is_killable "${args[i]}" && kill -s "$signal" "${args[i]}" 2>/dev/null; then
+      ((sent++))
+    else
+      ((failed++))
+    fi
+  done
+  if ((sent > 0)); then
+    echo sent
+  elif ((failed > 0)); then
     echo refused
-    return
-  fi
-  if ! read_proc_stat "$pid" || [[ $proc_state == Z ]]; then
+  else
     echo gone
-    return
   fi
-  if [[ $proc_start != "$expected" ]]; then
-    echo changed
-    return
-  fi
-  if ! is_killable "$pid" || ! kill -s "$signal" "$pid" 2>/dev/null; then
-    echo refused
-    return
-  fi
-  echo sent
 }
 
 # For each <pid> <start> pair still running, prints: alive <pid>. Always ends with ok,

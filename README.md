@@ -25,15 +25,15 @@ An Omarchy shell bar widget that shows CPU and memory usage with their icons (or
 |---|---|
 | **Meters** | CPU, memory, swap, CPU temperature and GPU temperature, tinted as they run hot. With a graphics card, the GPU reading is the card's, not the graphics built into the CPU |
 | **System info** | Load average, core count and uptime |
-| **Process list** | Scrollable list of the 50 busiest processes, refreshed while the panel is open |
-| **Safe process control** | Processes that are safe to stop have a stop button in the **Stop** column, with a confirmation step |
+| **Program list** | The 12 heaviest programs, with each program's processes added up into one row (`brave ×33 · 5.9 GiB`). Click the **CPU** or **Memory** heading to sort by it; memory is the default. Refreshed while the panel is open |
+| **Safe process control** | Programs that are safe to stop have a stop button, with a confirmation step. Stopping a program stops all of its processes |
 
 ### Process control
 
-- Stopping a process asks for confirmation first.
-- While a process shuts down, its row shows how long it has been stopping and a **Force kill** button.
+- Stopping a program asks for confirmation first, and covers every process listed under its name.
+- While a program shuts down, its row shows how long it has been stopping and a **Force kill** button, which targets only the processes still running.
 - Nothing is ever force-killed automatically.
-- System processes, and processes the desktop session depends on, have no stop button: Hyprland and `start-hyprland`, the shell, Xwayland, `systemd`, D-Bus, UWSM, PipeWire and WirePlumber, the desktop portals, `hyprlock`, `hypridle` and the GNOME keyring.
+- A program with any process you can't stop has no stop button. That includes system processes and the processes the desktop session depends on: Hyprland and `start-hyprland`, the shell, Xwayland, `systemd`, D-Bus, UWSM, PipeWire and WirePlumber, the desktop portals, `hyprlock`, `hypridle` and the GNOME keyring.
 - That list guards against a mistaken click, not against a hostile program: protection goes by process name, and any program can give itself one of those names.
 
 ## Usage

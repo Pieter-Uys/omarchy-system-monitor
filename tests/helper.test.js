@@ -53,17 +53,20 @@ function run(args, topOutput = TOP_OUTPUT, { sys, stubs = {} } = {}) {
   }
 }
 
-test("--top reports the second frame as a share of all cores", () => {
+// Resident memory in KiB, read the way the helper reads it.
+const rssOf = pid => Number(fs.readFileSync(`/proc/${pid}/statm`, "utf8").split(" ")[1]) * 4
+
+test("--top reports the second frame as a share of all cores, with no memory for a vanished process", () => {
   const r = run(["--top"])
   assert.strictEqual(r.status, 0)
   assert.strictEqual(r.stderr, "")
   assert.strictEqual(r.stdout, [
-    "proc\t9000101\t50.0\t5.0\t0\t0\tbusy proc --flag",
-    "proc\t9000102\t1.0\t1.5\t0\t0\tsmall",
-    "proc\t9000104\t0.5\t0.2\t0\t0\tthird",
-    "proc\t9000105\t0.2\t0.3\t0\t0\tfourth",
-    "proc\t9000106\t0.1\t0.4\t0\t0\tfifth",
-    "proc\t9000107\t0.1\t0.5\t0\t0\tsixth",
+    "proc\t9000101\t50.0\t0\t0\t0\tbusy proc --flag",
+    "proc\t9000102\t1.0\t0\t0\t0\tsmall",
+    "proc\t9000104\t0.5\t0\t0\t0\tthird",
+    "proc\t9000105\t0.2\t0\t0\t0\tfourth",
+    "proc\t9000106\t0.1\t0\t0\t0\tfifth",
+    "proc\t9000107\t0.1\t0\t0\t0\tsixth",
     ""
   ].join("\n"))
 })
@@ -91,7 +94,7 @@ test("an unknown argument prints usage and fails", () => {
   const r = run(["--bad"])
   assert.strictEqual(r.status, 1)
   assert.strictEqual(r.stdout, "")
-  assert.match(r.stderr, /^Usage: system-monitor \[--gpu \| --top \| --kill <pid> <start> \[--force\] \| --check <pid> <start>\.\.\.\]\n$/)
+  assert.match(r.stderr, /^Usage: system-monitor \[--gpu \| --top \| --kill <pid> <start>\.\.\. \[--force\] \| --check <pid> <start>\.\.\.\]\n$/)
 })
 
 const sleepMs = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
@@ -121,7 +124,8 @@ function withProcess(command, args, comm, fn) {
 test("--top marks your own process as stoppable", () => {
   withProcess("sleep", ["30"], "sleep", pid => {
     const r = run(["--top"], [HEADER, "", HEADER, row(pid, perCore(0.1), "0.1", "sleep")].join("\n"))
-    assert.strictEqual(r.stdout, `proc\t${pid}\t0.1\t0.1\t1\t${startOf(pid)}\tsleep\n`)
+    assert.strictEqual(r.stdout, `proc\t${pid}\t0.1\t${rssOf(pid)}\t1\t${startOf(pid)}\tsleep\n`)
+    assert.ok(rssOf(pid) > 0)
   })
 })
 
@@ -147,7 +151,7 @@ test("a critical desktop process can't be listed as stoppable or stopped", () =>
     withNamedProcess(file, pid => {
       const comm = file.slice(0, 15)
       const top = run(["--top"], [HEADER, "", HEADER, row(pid, perCore(0.1), "0.1", comm)].join("\n"))
-      assert.strictEqual(top.stdout, `proc\t${pid}\t0.1\t0.1\t0\t0\t${comm}\n`, file)
+      assert.strictEqual(top.stdout, `proc\t${pid}\t0.1\t${rssOf(pid)}\t0\t0\t${comm}\n`, file)
       assert.strictEqual(run(["--kill", String(pid), startOf(pid), "--force"]).stdout, "refused\n", file)
       assert.ok(isLive(pid), file)
     })
@@ -158,7 +162,7 @@ test("a process name shaped like a placeholder or markup passes through untouche
   withNamedProcess("%1%2<b>x<i>", pid => {
     const name = "%1%2<b>x<i>"
     const top = run(["--top"], [HEADER, "", HEADER, row(pid, perCore(0.1), "0.1", name)].join("\n"))
-    assert.strictEqual(top.stdout, `proc\t${pid}\t0.1\t0.1\t1\t${startOf(pid)}\t${name}\n`)
+    assert.strictEqual(top.stdout, `proc\t${pid}\t0.1\t${rssOf(pid)}\t1\t${startOf(pid)}\t${name}\n`)
   })
 })
 
@@ -171,7 +175,7 @@ test("--kill stops the process it was asked to", () => {
 
 test("--kill leaves a process alone if its PID was reused", () => {
   withProcess("sleep", ["30"], "sleep", pid => {
-    assert.strictEqual(run(["--kill", String(pid), "1"]).stdout, "changed\n")
+    assert.strictEqual(run(["--kill", String(pid), "1"]).stdout, "gone\n")
     assert.ok(isLive(pid))
   })
 })
@@ -184,6 +188,25 @@ test("only --force ends a process that ignores the graceful stop", () => {
     assert.ok(isLive(pid))
     assert.strictEqual(run(["--kill", String(pid), start, "--force"]).stdout, "sent\n")
     waitUntilGone(pid)
+  })
+})
+
+test("one --kill stops every process of a program", () => {
+  withProcess("sleep", ["30"], "sleep", a => {
+    withProcess("sleep", ["30"], "sleep", b => {
+      assert.strictEqual(run(["--kill", String(a), startOf(a), "9000199", "5", String(b), startOf(b)]).stdout, "sent\n")
+      waitUntilGone(a)
+      waitUntilGone(b)
+    })
+  })
+})
+
+test("one malformed pair refuses the whole --kill before anything is signalled", () => {
+  withProcess("sleep", ["30"], "sleep", pid => {
+    assert.strictEqual(run(["--kill", String(pid), startOf(pid), "1;id", "1"]).stdout, "refused\n")
+    assert.strictEqual(run(["--kill", String(pid), startOf(pid), "123"]).stdout, "refused\n")
+    sleepMs(100)
+    assert.ok(isLive(pid))
   })
 })
 
