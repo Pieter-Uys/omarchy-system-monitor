@@ -6,7 +6,7 @@
   "author": "Pieter-Uys",
   "license": "MIT",
   "homepage": "https://github.com/Pieter-Uys/omarchy-system-monitor",
-  "description": "CPU, memory and temperature in the bar, with a panel of detailed readings and the busiest processes. Reads /proc, /sys and nvidia-smi locally; no network access.",
+  "description": "CPU and memory in the bar, with a panel of CPU, GPU, memory and swap readings, their temperatures, and the heaviest programs. Reads /proc, /sys and nvidia-smi locally; no network access.",
   "kinds": [
     "bar-widget"
   ],
@@ -15,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "System Stats",
-    "description": "CPU, memory and temperature readout with a detail panel and top processes.",
+    "description": "CPU and memory readout with a detail panel of meters and the heaviest programs.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
