@@ -95,11 +95,16 @@ gpu_temp() {
     return
   fi
   if [[ -n $awake ]] && command -v nvidia-smi > /dev/null; then
-    line=$(timeout 2 nvidia-smi -i "$awake" --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
+    line=$(timeout 2 nvidia-smi -i "$awake" --query-gpu=temperature.gpu,utilization.gpu --format=csv,noheader,nounits 2>/dev/null)
     line=${line%%$'\n'*}
     line=${line//[[:space:]]/}
-    if [[ $line =~ ^[0-9]{1,3}$ ]]; then
-      printf 'gputemp\t%d\n' "$((line * 1000))"
+    # "<temp>,<load>". Either field can be [N/A] on a card that doesn't report it; each one
+    # is printed only when it's a number, so a card without a temperature still shows its load.
+    if [[ $line =~ ^([0-9]{1,3}|\[N/A\])(,(.*))?$ ]]; then
+      # Copied out first: the next [[ =~ ]] replaces BASH_REMATCH.
+      local temp=${BASH_REMATCH[1]} load=${BASH_REMATCH[3]:-}
+      [[ $temp =~ ^[0-9]+$ ]] && printf 'gputemp\t%d\n' "$((temp * 1000))"
+      emit_load "$load"
       return
     fi
   fi
@@ -138,4 +143,15 @@ gpu_temp() {
     return
   fi
   emit_temp gputemp "$best" edge
+  # amdgpu reports how busy it is; the other drivers here don't, so their row shows temperature only.
+  local busy=""
+  { busy=$(<"$best/device/gpu_busy_percent"); } 2>/dev/null
+  emit_load "$busy"
+}
+
+# Prints "gpuload\t<0-100>", or nothing if the value isn't a whole percentage.
+emit_load() {
+  local load=$1
+  [[ $load =~ ^[0-9]{1,3}$ ]] && ((load <= 100)) && printf 'gpuload\t%d\n' "$load"
+  return 0
 }

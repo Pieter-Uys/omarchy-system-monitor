@@ -3,7 +3,9 @@
 
 var MAX_LINES = 64
 var MAX_FIELDS = 8
-var MAX_PROCS = 50
+// The helper lists every process so each program's can be added up; the panel shows the top few.
+var MAX_PROCS = 4000
+var MAX_ROWS = 12
 var MAX_NAME = 48
 
 function toInt(value) {
@@ -43,7 +45,7 @@ function reading(sample, prevCpu) {
     memFraction: NaN, memUsedKb: NaN, memTotalKb: NaN,
     swapFraction: NaN, swapUsedKb: NaN, swapTotalKb: NaN,
     load: [], uptimeSec: NaN, cores: 1,
-    cpuTemp: NaN, gpuTemp: NaN, gpuAsleep: false
+    cpuTemp: Number.NaN, gpuTemp: Number.NaN, gpuLoad: Number.NaN, gpuAsleep: false
   }
 
   if (sample.cpu) {
@@ -98,8 +100,10 @@ function reading(sample, prevCpu) {
 
   r.cpuTemp = tempC(sample.cputemp ? sample.cputemp[0] : undefined)
   r.gpuTemp = tempC(sample.gputemp ? sample.gputemp[0] : undefined)
+  var gl = toInt(sample.gpuload ? sample.gpuload[0] : undefined)
+  if (gl >= 0 && gl <= 100) r.gpuLoad = gl / 100
   // A powered-down card is shown as asleep; the helper never wakes it to read it.
-  r.gpuAsleep = Number.isNaN(r.gpuTemp) &&!!sample.gpusleep && sample.gpusleep[0] === "1"
+  r.gpuAsleep = Number.isNaN(r.gpuTemp) && Number.isNaN(r.gpuLoad) && !!sample.gpusleep && sample.gpusleep[0] === "1"
   return r
 }
 
@@ -119,27 +123,68 @@ function cleanName(name) {
 }
 
 // CPU arrives from the helper as a share of the whole machine, so 100 is the ceiling.
+// Memory arrives as resident KiB.
 function parseProcs(raw) {
   var out = []
   var lines = String(raw || "").split("\n")
-  for (var i = 0; i < lines.length && i < MAX_LINES && out.length < MAX_PROCS; i++) {
+  for (var i = 0; i < lines.length && i < MAX_PROCS + 1 && out.length < MAX_PROCS; i++) {
     var p = lines[i].split("\t")
     if (p.length < 7 || p[0] !== "proc") continue
     if (!/^\d{1,10}$/.test(p[1])) continue
-    var cpu = toNumber(p[2]), mem = toNumber(p[3])
-    if (isNaN(cpu) || isNaN(mem)) continue
+    var cpu = toNumber(p[2]), memKb = toInt(p[3])
+    if (Number.isNaN(cpu) || Number.isNaN(memKb) || memKb < 0) continue
     if (!/^[01]$/.test(p[4]) || !/^\d{1,20}$/.test(p[5])) continue
     var name = cleanName(p.slice(6).join(" "))
     if (name === "") continue
-    out.push({ pid: parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), mem: clamp(mem, 0, 100), killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
+    out.push({ pid: Number.parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), memKb: memKb, killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
   }
   return out
+}
+
+// One row per program: processes sharing a name are added up, so a browser's dozens of
+// processes read as one line. A program can be stopped only if every one of its processes can.
+// Sorted by "cpu" or "memory", busiest first, and cut to the top `limit`.
+function groupProcs(procs, sortKey, limit) {
+  // No prototype, so a program named "constructor" or "__proto__" is just another key.
+  var byName = Object.create(null), groups = []
+  for (const p of procs) {
+    var g = byName[p.name]
+    if (!g) {
+      g = byName[p.name] = { name: p.name, count: 0, cpu: 0, memKb: 0, killable: true, members: [] }
+      groups.push(g)
+    }
+    g.count++
+    g.cpu += p.cpu
+    g.memKb += p.memKb
+    g.killable = g.killable && p.killable
+    g.members.push({ pid: p.pid, start: p.start })
+  }
+  var key = sortKey === "cpu" ? "cpu" : "memKb", other = key === "cpu" ? "memKb" : "cpu"
+  groups.sort(function(a, b) {
+    return b[key] - a[key] || b[other] - a[other] || compareNames(a.name, b.name)
+  })
+  for (const g of groups) g.cpu = clamp(g.cpu, 0, 100)
+  return groups.slice(0, limit === undefined ? MAX_ROWS : limit)
+}
+
+// Alphabetical order, the last tie-break between programs.
+function compareNames(a, b) {
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
+}
+
+// { value, unit } for a size in KiB: whole MiB below 1 GiB, else GiB to one decimal.
+function size(kb) {
+  if (Number.isNaN(kb) || kb < 0) return null
+  if (kb < 1048576) return { value: Math.max(0, Math.round(kb / 1024)), decimals: 0, unit: "MiB" }
+  return { value: kb / 1048576, decimals: 1, unit: "GiB" }
 }
 
 // Anything unexpected from the helper counts as refused.
 function parseKillResult(raw) {
   var s = String(raw || "").trim()
-  return ["sent", "gone", "changed", "refused"].indexOf(s) >= 0 ? s : "refused"
+  return ["sent", "gone", "refused"].includes(s) ? s : "refused"
 }
 
 // The PIDs a --check of `asked` processes found running, or null if the check didn't finish.
@@ -157,22 +202,21 @@ function parseAlive(raw, asked) {
   return alive
 }
 
-// Processes shutting down stay pinned at the top, even if they'd drop out of the busiest 50.
-function mergeStopping(procs, stopping) {
-  var out = [], pinned = {}, i
-  var live = {}
-  for (i = 0; i < procs.length; i++) live[procs[i].pid + ":" + procs[i].start] = procs[i]
+// Programs shutting down stay pinned at the top, even if they'd drop out of the top rows.
+function mergeStopping(groups, stopping) {
+  var out = [], pinned = Object.create(null), live = Object.create(null), i
+  for (i = 0; i < groups.length; i++) live[groups[i].name] = groups[i]
   for (i = 0; i < stopping.length; i++) {
-    var s = stopping[i], key = s.pid + ":" + s.start, now = live[key] || s
-    pinned[key] = true
-    out.push({ pid: s.pid, start: s.start, name: s.name, cpu: now.cpu, mem: now.mem, killable: false,
-      stopping: true, forced: s.forced, since: s.since })
+    var s = stopping[i], now = live[s.name] || s
+    pinned[s.name] = true
+    out.push({ name: s.name, count: now.count, cpu: now.cpu, memKb: now.memKb, killable: false,
+      members: s.members, stopping: true, forced: s.forced, since: s.since })
   }
-  for (i = 0; i < procs.length; i++) {
-    var p = procs[i]
-    if (pinned[p.pid + ":" + p.start]) continue
-    out.push({ pid: p.pid, start: p.start, name: p.name, cpu: p.cpu, mem: p.mem, killable: p.killable,
-      stopping: false, forced: false, since: 0 })
+  for (i = 0; i < groups.length; i++) {
+    var g = groups[i]
+    if (pinned[g.name]) continue
+    out.push({ name: g.name, count: g.count, cpu: g.cpu, memKb: g.memKb, killable: g.killable,
+      members: g.members, stopping: false, forced: false, since: 0 })
   }
   return out
 }
@@ -193,28 +237,35 @@ function tempLevel(c) {
 }
 
 // The panel's meters, in display order. Each key is also its translation key.
-var METERS = ["cpu", "memory", "swap", "cpuTemp", "gpuTemp"]
+// CPU and GPU carry their temperature in the label, so there's no separate temperature row.
+var METERS = ["cpu", "gpu", "memory", "swap"]
 
-// Whether a meter shows, how full it is, and its warning level.
+// Whether a meter shows, how full it is, its warning level, and the temperature beside its
+// label (NaN for none). A meter tints for whichever of its load and temperature runs hotter.
 function meter(key, stats) {
   switch (key) {
   case "cpu":
-    return { visible: true, fraction: stats.cpu, level: level(stats.cpu) }
+    return { visible: true, fraction: stats.cpu, temp: stats.cpuTemp,
+      level: worstLevel(level(stats.cpu), tempLevel(stats.cpuTemp)) }
+  case "gpu":
+    if (stats.gpuAsleep) return { visible: true, fraction: 0, temp: Number.NaN, level: "normal" }
+    // Without a load reading (NVIDIA under nouveau, Intel, radeon), the bar shows temperature.
+    if (Number.isNaN(stats.gpuLoad)) {
+      return { visible: !Number.isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, temp: Number.NaN, level: tempLevel(stats.gpuTemp) }
+    }
+    return { visible: true, fraction: stats.gpuLoad, temp: stats.gpuTemp,
+      level: worstLevel(level(stats.gpuLoad), tempLevel(stats.gpuTemp)) }
   case "memory":
-    return { visible: true, fraction: stats.memFraction, level: level(stats.memFraction) }
+    return { visible: true, fraction: stats.memFraction, temp: Number.NaN, level: level(stats.memFraction) }
   case "swap":
     return {
-      visible: !isNaN(stats.swapTotalKb),
+      visible: !Number.isNaN(stats.swapTotalKb),
       fraction: stats.swapTotalKb === 0 ? 0 : stats.swapFraction,
+      temp: Number.NaN,
       level: level(stats.swapFraction)
     }
-  case "cpuTemp":
-    return { visible: !isNaN(stats.cpuTemp), fraction: stats.cpuTemp / 100, level: tempLevel(stats.cpuTemp) }
-  case "gpuTemp":
-    if (stats.gpuAsleep) return { visible: true, fraction: 0, level: "normal" }
-    return { visible: !isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, level: tempLevel(stats.gpuTemp) }
   }
-  return { visible: false, fraction: NaN, level: "normal" }
+  return { visible: false, fraction: Number.NaN, temp: Number.NaN, level: "normal" }
 }
 
 function gib(kb) {

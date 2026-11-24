@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0
+
+- The process list now shows programs, not processes: processes sharing a name are added up into one row, so a browser's dozens of processes read as one line (`brave ×33`). Stopping a program stops all of its processes, with the same confirmation and force-kill steps as before.
+- Memory shows as a size (`790 MiB`, `2.6 GiB`) rather than a percentage. For a program split across several processes it counts memory they share once, not once per process, so a browser reads as what closing it would free rather than several times that.
+- Click the **CPU** or **Memory** heading to sort by it. The list now starts sorted by memory.
+- The list shows the 12 heaviest programs, so it fits without much scrolling.
+- The **Stop** heading is gone; the stop button on each row is enough.
+- The GPU meter now shows how busy the GPU is, on NVIDIA's driver and on AMD, with its temperature beside the name (`GPU · 42°C`). The CPU meter shows its temperature the same way, so the separate temperature rows are gone and the panel is shorter.
+- **Open btop** at the bottom of the panel opens `btop`, or brings it forward if it's already open.
+
+After updating, restart the shell (`omarchy restart shell`) so it loads the new panel.
+
 ## 1.0.1
 
 - On a machine with an AMD card and AMD graphics built into the CPU, the GPU temperature is now the card's even when the BIOS gives the CPU's graphics more memory than the card has. Built-in graphics are now recognised by the sensor only they have, not by memory size.

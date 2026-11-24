@@ -2,10 +2,13 @@ import QtQuick
 import qs.Commons
 import qs.Commons as Commons
 
-// One line of the process list, or its column header.
+// One line of the process list, or its column header. Clicking the CPU or Memory heading
+// sorts the list by it; the column in use reads bold.
 Row {
   id: procRow
   signal killRequested()
+  signal sortRequested(string key)
+  property string sortKey: ""
   property color foreground: "transparent"
   property string fontFamily: ""
   property bool killable: false
@@ -13,9 +16,7 @@ Row {
   property string name: ""
   property string cpu: ""
   property string mem: ""
-  // The Stop column's heading. Every row gets it, so every row sizes the column the same.
-  property string stopText: ""
-  readonly property real killSlot: Math.max(Style.space(18), Math.ceil(stopMetrics.advanceWidth))
+  readonly property real killSlot: Style.space(18)
   property bool stopping: false
   property bool forced: false
   property string status: ""
@@ -47,6 +48,14 @@ Row {
     color: procRow.foreground
     font.family: procRow.fontFamily
     font.pixelSize: Style.font.bodySmall
+    font.bold: procRow.header && procRow.sortKey === "cpu"
+
+    MouseArea {
+      anchors.fill: parent
+      enabled: procRow.header
+      cursorShape: Qt.PointingHandCursor
+      onClicked: procRow.sortRequested("cpu")
+    }
   }
 
   PlainText {
@@ -57,31 +66,22 @@ Row {
     color: procRow.foreground
     font.family: procRow.fontFamily
     font.pixelSize: Style.font.bodySmall
+    font.bold: procRow.header && procRow.sortKey === "memory"
+
+    MouseArea {
+      anchors.fill: parent
+      enabled: procRow.header
+      cursorShape: Qt.PointingHandCursor
+      onClicked: procRow.sortRequested("memory")
+    }
   }
 
-  TextMetrics {
-    id: stopMetrics
-    font.family: procRow.fontFamily
-    font.pixelSize: Style.font.bodySmall
-    text: procRow.stopText
-  }
-
-  // The Stop column: its heading in the header row, and a stop button on every process
-  // that's safe to stop. Protected processes leave it empty.
+  // A stop button on every program that's safe to stop. Protected ones, and the header,
+  // leave it empty.
   Item {
     visible: !procRow.stopping
     width: parent.killSlot
-    height: procRow.header ? stopHeading.implicitHeight : killGlyph.implicitHeight
-
-    PlainText {
-      id: stopHeading
-      anchors.centerIn: parent
-      visible: procRow.header
-      text: procRow.stopText
-      color: procRow.foreground
-      font.family: procRow.fontFamily
-      font.pixelSize: Style.font.bodySmall
-    }
+    height: killGlyph.implicitHeight
 
     PlainText {
       id: killGlyph

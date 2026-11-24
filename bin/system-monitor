@@ -4,10 +4,10 @@
 #
 #   system-monitor          tab-separated sample: cpu, mem, swap, load, uptime, cores, CPU temp
 #   system-monitor --gpu    the same plus the GPU temperature (gputemp), or gpusleep if it's powered down
-#   system-monitor --top    the 50 busiest processes as:
-#                           proc <pid> <cpu%> <mem%> <killable 0|1> <start-ticks> <name>
-#   system-monitor --kill <pid> <start-ticks> [--force]
-#                           signals one of your processes; prints sent, gone, changed or refused
+#   system-monitor --top    every process as:
+#                           proc <pid> <cpu%> <rss-KiB> <killable 0|1> <start-ticks> <name>
+#   system-monitor --kill <pid> <start-ticks>... [--force]
+#                           signals your processes; prints sent, gone or refused
 #   system-monitor --check <pid> <start-ticks>...
 #                           prints alive <pid> for each one still running, then ok
 
@@ -33,7 +33,7 @@ case "${1:-}" in
     check_procs "$@"
     ;;
   *)
-    echo "Usage: system-monitor [--gpu | --top | --kill <pid> <start> [--force] | --check <pid> <start>...]" >&2
+    echo "Usage: system-monitor [--gpu | --top | --kill <pid> <start>... [--force] | --check <pid> <start>...]" >&2
     exit 1
     ;;
 esac

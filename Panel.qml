@@ -36,7 +36,10 @@ Panel {
   // Hold the list still while it's being aimed at, so a row can't move under the cursor.
   readonly property bool procsHeld: procListHovered || killer.target !== null
 
-  readonly property var procRows: Model.mergeStopping(root.procs, killer.stopping)
+  // "memory" or "cpu", switched by clicking the column heading. Memory first, since that's
+  // usually what you're looking for. Not saved: each session starts on memory.
+  property string sortKey: "memory"
+  readonly property var procRows: Model.mergeStopping(Model.groupProcs(root.procs, root.sortKey), killer.stopping)
 
   readonly property color fg: root.bar ? root.bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
@@ -71,8 +74,29 @@ Panel {
     if (key === "cpu") return root.pct(s.cpu)
     if (key === "memory") return root.memText(s.memUsedKb, s.memTotalKb)
     if (key === "swap") return s.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(s.swapUsedKb, s.swapTotalKb)
-    if (key === "gpuTemp" && s.gpuAsleep) return strings.t("gpuAsleep")
-    return root.deg(key === "cpuTemp" ? s.cpuTemp : s.gpuTemp)
+    if (s.gpuAsleep) return strings.t("gpuAsleep")
+    return isNaN(s.gpuLoad) ? root.deg(s.gpuTemp) : root.pct(s.gpuLoad)
+  }
+
+  // "CPU · 58°C" when the meter has a temperature, else just its name.
+  function meterLabel(key, temp) {
+    return isNaN(temp) ? strings.t(key) : strings.t("withTemp").arg(strings.t(key)).arg(root.deg(temp))
+  }
+
+  // Hands the full picture to btop, raising it if it's already open.
+  function openBtop() {
+    root.close()
+    Quickshell.execDetached(["omarchy", "launch", "or", "focus", "tui", "btop"])
+  }
+
+  function sizeText(kb) {
+    var z = Model.size(kb)
+    if (!z) return "—"
+    return strings.t(z.unit === "GiB" ? "sizeGiB" : "sizeMiB").arg(Commons.I18n.formatNumber(z.value, z.decimals))
+  }
+
+  function groupName(row) {
+    return row.count > 1 ? strings.t("groupName").arg(row.name).arg(Commons.I18n.formatNumber(row.count)) : row.name
   }
 
   function uptimeText(sec) {
@@ -122,6 +146,7 @@ Panel {
     // vanish; if the panel is open, read the GPU straight away.
     if (!withGpu) {
       next.gpuTemp = root.stats.gpuTemp
+      next.gpuLoad = root.stats.gpuLoad
       next.gpuAsleep = root.stats.gpuAsleep
       if (root.opened) warmup.restart()
     }
@@ -179,8 +204,8 @@ Panel {
     helperPath: root.helperPath
     translations: strings
     active: root.opened
-    onProcessGone: function(pid) {
-      root.procs = root.procs.filter(function(p) { return p.pid !== pid })
+    onProcessGone: function(name) {
+      root.procs = root.procs.filter(function(p) { return p.name !== name })
     }
   }
 
@@ -303,7 +328,8 @@ Panel {
         fontFamily: root.fontFamily
         confirmText: strings.t(killer.force ? "killForce" : "killStop")
         message: killer.target
-          ? strings.t(killer.force ? "killForceConfirm" : "killConfirm").arg(killer.target.pid).arg(killer.target.name)
+          ? strings.tn(killer.force ? "killForceConfirm" : "killConfirm", killer.target.members.length)
+            .arg(killer.target.name).arg(Commons.I18n.formatNumber(killer.target.members.length))
           : ""
         onOpenedChanged: if (opened) selectedIndex = 0
         onCanceled: killer.cancel()
@@ -349,7 +375,7 @@ Panel {
             foreground: root.fg
             fontFamily: root.fontFamily
             visible: reading.visible
-            label: strings.t(modelData)
+            label: root.meterLabel(modelData, reading.temp)
             value: root.meterValue(modelData)
             fraction: reading.fraction
             tint: root.levelColor(reading.level)
@@ -369,7 +395,8 @@ Panel {
             name: strings.t("process")
             cpu: strings.t("cpu")
             mem: strings.t("memory")
-            stopText: strings.t("stopColumn")
+            sortKey: root.sortKey
+            onSortRequested: function(key) { root.sortKey = key }
           }
 
           PlainText {
@@ -418,11 +445,10 @@ Panel {
                   required property var modelData
                   foreground: root.fg
                   fontFamily: root.fontFamily
-                  name: modelData.name
+                  name: root.groupName(modelData)
                   cpu: strings.t("percent").arg(Commons.I18n.formatNumber(modelData.cpu, 1))
-                  mem: root.pct(modelData.mem / 100)
+                  mem: root.sizeText(modelData.memKb)
                   killable: modelData.killable
-                  stopText: strings.t("stopColumn")
                   stopping: modelData.stopping
                   forced: modelData.forced
                   forceText: strings.t("killForce")
@@ -434,6 +460,25 @@ Panel {
                 }
               }
             }
+          }
+        }
+
+        // Anything the panel doesn't cover is one click away in btop.
+        PlainText {
+          anchors.horizontalCenter: parent.horizontalCenter
+          text: strings.t("openBtop")
+          color: root.fg
+          opacity: btopMouse.containsMouse ? 1 : 0.55
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+
+          MouseArea {
+            id: btopMouse
+            anchors.fill: parent
+            anchors.margins: -Style.space(4)
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.openBtop()
           }
         }
       }

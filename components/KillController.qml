@@ -2,8 +2,8 @@ import QtQuick
 import Quickshell.Io
 import "../Model.js" as Model
 
-// Asks a process to quit and follows it until it exits. Nothing is force-killed
-// unless the user asks, so a slow app can take as long as it needs.
+// Asks a program's processes to quit and follows them until they've all exited. Nothing is
+// force-killed unless the user asks, so a slow app can take as long as it needs.
 Item {
   id: controller
 
@@ -18,8 +18,9 @@ Item {
   property real now: Date.now()
   property var pending: null
   property var checking: []
+  property int asked: 0
 
-  signal processGone(var pid)
+  signal processGone(string name)
 
   function request(proc) {
     if (killProc.running) return
@@ -35,7 +36,8 @@ Item {
 
   function confirm() {
     if (!controller.target || killProc.running) return
-    var command = ["bash", controller.helperPath, "--kill", String(controller.target.pid), controller.target.start]
+    var command = ["bash", controller.helperPath, "--kill"]
+    controller.target.members.forEach(function(m) { command.push(String(m.pid), m.start) })
     if (controller.force) command.push("--force")
     controller.pending = { proc: controller.target, forced: controller.force }
     controller.cancel()
@@ -48,9 +50,9 @@ Item {
     noticeTimer.restart()
   }
 
-  function forget(pid) {
-    controller.stopping = controller.stopping.filter(function(s) { return s.pid !== pid })
-    controller.processGone(pid)
+  function forget(name) {
+    controller.stopping = controller.stopping.filter(function(s) { return s.name !== name })
+    controller.processGone(name)
   }
 
   function onResult(raw) {
@@ -61,17 +63,17 @@ Item {
     if (result === "sent") {
       if (job.forced) {
         controller.stopping = controller.stopping.map(function(s) {
-          return s.pid === job.proc.pid ? Object.assign({}, s, { forced: true }) : s
+          return s.name === job.proc.name ? Object.assign({}, s, { forced: true }) : s
         })
       } else {
         controller.now = Date.now()
         controller.stopping = controller.stopping.concat([{
-          pid: job.proc.pid, start: job.proc.start, name: job.proc.name,
-          cpu: job.proc.cpu, mem: job.proc.mem, forced: false, since: controller.now
+          name: job.proc.name, members: job.proc.members, count: job.proc.count,
+          cpu: job.proc.cpu, memKb: job.proc.memKb, forced: false, since: controller.now
         }])
       }
-    } else if (result === "gone" || result === "changed") {
-      controller.forget(job.proc.pid)
+    } else if (result === "gone") {
+      controller.forget(job.proc.name)
       controller.showNotice("killGone", job.proc.name)
     } else {
       controller.showNotice("killFailed", job.proc.name)
@@ -81,22 +83,30 @@ Item {
   function check() {
     if (checkProc.running || controller.stopping.length === 0) return
     var command = ["bash", controller.helperPath, "--check"]
+    var asked = 0
     controller.checking = controller.stopping.map(function(s) {
-      command.push(String(s.pid), s.start)
-      return s.pid
+      s.members.forEach(function(m) { command.push(String(m.pid), m.start) })
+      asked += s.members.length
+      return s.name
     })
+    controller.asked = asked
     checkProc.command = command
     checkProc.running = true
   }
 
   function onChecked(raw) {
     var checked = controller.checking
-    var alive = Model.parseAlive(raw, checked.length)
+    var alive = Model.parseAlive(raw, controller.asked)
     if (!alive) return
+    // Keep following only the processes still running, so a force kill targets just those.
+    controller.stopping = controller.stopping.map(function(s) {
+      if (checked.indexOf(s.name) < 0) return s
+      return Object.assign({}, s, { members: s.members.filter(function(m) { return alive[m.pid] }) })
+    })
     controller.stopping.filter(function(s) {
-      return checked.indexOf(s.pid) >= 0 && !alive[s.pid]
+      return checked.indexOf(s.name) >= 0 && s.members.length === 0
     }).forEach(function(s) {
-      controller.forget(s.pid)
+      controller.forget(s.name)
       controller.showNotice("killStopped", s.name)
     })
   }
