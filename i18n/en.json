@@ -8,6 +8,7 @@
   "load": "Load",
   "uptime": "Up",
   "noSwap": "None",
+  "gpuAsleep": "Asleep",
   "process": "Process",
   "killConfirm": "Stop %2 (PID %1)?",
   "killForceConfirm": "Force kill %2 (PID %1)? Unsaved work will be lost.",

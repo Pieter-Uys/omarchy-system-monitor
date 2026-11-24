@@ -1,4 +1,4 @@
-// Run with: node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/
+// Run from the repository with: node --test tests/
 const test = require("node:test")
 const assert = require("node:assert")
 const fs = require("node:fs")
@@ -203,4 +203,24 @@ test("meters handle no swap and missing readings", () => {
   const cpu = M.meter("cpu", { cpu: NaN })
   assert.deepStrictEqual([cpu.visible, cpu.level], [true, "normal"])
   assert.strictEqual(M.meter("unknown", {}).visible, false)
+})
+
+test("a sleeping GPU shows as asleep, never as a temperature", () => {
+  const asleep = M.reading(M.parseSample("gpusleep\t1"), null)
+  assert.strictEqual(asleep.gpuAsleep, true)
+  assert.ok(isNaN(asleep.gpuTemp))
+  const m = M.meter("gpuTemp", asleep)
+  assert.deepStrictEqual([m.visible, m.fraction, m.level], [true, 0, "normal"])
+  // A real reading wins, and anything but "1" isn't a sleep report.
+  assert.strictEqual(M.reading(M.parseSample("gputemp\t61000\ngpusleep\t1"), null).gpuAsleep, false)
+  assert.strictEqual(M.reading(M.parseSample("gpusleep\tyes"), null).gpuAsleep, false)
+  assert.strictEqual(M.reading({}, null).gpuAsleep, false)
+})
+
+test("a check can report no more processes than it was asked about", () => {
+  assert.deepStrictEqual(Object.keys(M.parseAlive("alive\t12\nalive\t34\nok\n", 2)), ["12", "34"])
+  assert.strictEqual(M.parseAlive("alive\t12\nalive\t34\nok\n", 1), null)
+  const many = Array.from({ length: 60 }, (_, i) => `alive\t${i + 1}`).concat("ok").join("\n")
+  assert.strictEqual(Object.keys(M.parseAlive(many, 60)).length, 60)
+  assert.strictEqual(M.parseAlive(many), null)
 })

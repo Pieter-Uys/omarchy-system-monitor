@@ -71,6 +71,7 @@ Panel {
     if (key === "cpu") return root.pct(s.cpu)
     if (key === "memory") return root.memText(s.memUsedKb, s.memTotalKb)
     if (key === "swap") return s.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(s.swapUsedKb, s.swapTotalKb)
+    if (key === "gpuTemp" && s.gpuAsleep) return strings.t("gpuAsleep")
     return root.deg(key === "cpuTemp" ? s.cpuTemp : s.gpuTemp)
   }
 
@@ -102,17 +103,28 @@ Panel {
     if (root.bar && root.bar.shell) root.bar.shell.updateEntryInline(root.moduleName, root.settings)
   }
 
+  // The GPU temperature only shows in the panel, so the GPU is read only while it's open.
   function refresh() {
-    if (!sampleProc.running) sampleProc.running = true
+    if (sampleProc.running) return
+    sampleProc.withGpu = root.opened
+    sampleProc.command = root.opened ? ["bash", root.helperPath, "--gpu"] : ["bash", root.helperPath]
+    sampleProc.running = true
   }
 
   function refreshProcs() {
     if (!topProc.running) topProc.running = true
   }
 
-  function onSample(raw) {
+  function onSample(raw, withGpu) {
     var next = Model.reading(Model.parseSample(raw), root.prevCpu)
     if (next.cpuCounters) root.prevCpu = next.cpuCounters
+    // A sample taken without the GPU keeps the last GPU reading, so the meter doesn't
+    // vanish; if the panel is open, read the GPU straight away.
+    if (!withGpu) {
+      next.gpuTemp = root.stats.gpuTemp
+      next.gpuAsleep = root.stats.gpuAsleep
+      if (root.opened) warmup.restart()
+    }
     // The first sample has no CPU delta yet; keep the previous figure and
     // take a second reading shortly so the bar fills in quickly at startup.
     if (isNaN(next.cpu)) {
@@ -144,8 +156,9 @@ Panel {
 
   Process {
     id: sampleProc
+    property bool withGpu: false
     command: ["bash", root.helperPath]
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onSample(text) }
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onSample(text, sampleProc.withGpu) }
   }
 
   Process {
