@@ -5,6 +5,7 @@
 **CPU, memory and temperature at a glance, right in your Omarchy bar.**
 
 ![Omarchy](https://img.shields.io/badge/Omarchy-shell%20bar%20widget-5e81ac?style=flat-square)
+[![Tests](https://img.shields.io/github/actions/workflow/status/Pieter-Uys/omarchy-system-monitor/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/Pieter-Uys/omarchy-system-monitor/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Network](https://img.shields.io/badge/network%20requests-none-lightgrey?style=flat-square)
 
@@ -22,17 +23,18 @@ An Omarchy shell bar widget that shows CPU and memory usage with their icons (or
 
 | | |
 |---|---|
-| **Meters** | CPU, memory, swap, CPU temperature and GPU temperature, tinted as they run hot |
+| **Meters** | CPU, memory, swap, CPU temperature and GPU temperature, tinted as they run hot. With a graphics card, the GPU reading is the card's, not the graphics built into the CPU |
 | **System info** | Load average, core count and uptime |
 | **Process list** | Scrollable list of the 50 busiest processes, refreshed while the panel is open |
-| **Safe process control** | Hover a process to stop it, with a confirmation step |
+| **Safe process control** | Processes that are safe to stop have a stop button in the **Stop** column, with a confirmation step |
 
 ### Process control
 
 - Stopping a process asks for confirmation first.
 - While a process shuts down, its row shows how long it has been stopping and a **Force kill** button.
 - Nothing is ever force-killed automatically.
-- System processes and critical desktop processes such as Hyprland have no stop button.
+- System processes, and processes the desktop session depends on, have no stop button: Hyprland and `start-hyprland`, the shell, Xwayland, `systemd`, D-Bus, UWSM, PipeWire and WirePlumber, the desktop portals, `hyprlock`, `hypridle` and the GNOME keyring.
+- That list guards against a mistaken click, not against a hostile program: protection goes by process name, and any program can give itself one of those names.
 
 ## Usage
 
@@ -55,7 +57,7 @@ On a new Omarchy install:
 omarchy plugin add https://github.com/Pieter-Uys/omarchy-system-monitor.git --enable
 ```
 
-**Requirements:** only `bash`, `awk`, `top` (procps-ng) and `nproc` (coreutils), which every Omarchy install already has.
+**Requirements:** only `bash`, `awk`, `top` (procps-ng) and coreutils, which every Omarchy install already has. With an NVIDIA card on NVIDIA's own driver, the GPU temperature also needs `nvidia-smi`, which comes with the driver (`nvidia-utils`).
 
 Choose the `right` section when asked, or move it later:
 
@@ -89,6 +91,24 @@ omarchy plugin remove io.github.pieter-uys.system-monitor
 | `barLabel` | `CPU + Memory`, `CPU`, `Memory`, `Temperature`, `Icon only` | `CPU + Memory` |
 | `refreshIntervalSec` | 1 to 60 | `3` |
 
+<details>
+<summary><b>Supported temperature sensors</b></summary>
+
+<br>
+
+| Reading | Sensors |
+|---|---|
+| CPU | AMD (`k10temp`, `zenpower`), Intel (`coretemp`) and Raspberry Pi (`cpu_thermal`). The package or die sensor is preferred |
+| GPU | NVIDIA on NVIDIA's driver (through `nvidia-smi`), NVIDIA on `nouveau`, AMD (`amdgpu`, `radeon`) and Intel Arc on `xe` |
+
+- When a machine has both a graphics card and graphics built into the CPU, the card is reported.
+- A card that has powered itself down (common on laptops) shows as **Asleep**. It is never woken up just to be read.
+- The GPU is only read while the panel is open, because that is the only place its temperature appears.
+- A reading that is missing or can't be read is left out rather than shown as 0°.
+- Without a recognised sensor, that meter is hidden, and the bar's **Temperature** reading shows a dash.
+
+</details>
+
 ## IPC
 
 Control the widget from the command line or from keybindings:
@@ -101,21 +121,37 @@ omarchy-shell io.github.pieter-uys.system-monitor cycleLabel
 | Command | Description |
 |---|---|
 | `toggle` | Open or close the detail panel |
+| `open`, `show` | Open the detail panel |
+| `close`, `hide` | Close the detail panel |
 | `cycleLabel` | Advance to the next bar reading |
 
 ## Privacy
 
 > Everything stays on your machine.
 
-- All data is read locally by `bin/system-monitor` from `/proc`, `/sys/class/hwmon` and `top`.
+- All data is read locally by `bin/system-monitor` from `/proc`, `/sys` and `top`, plus `nvidia-smi` for an NVIDIA card while the panel is open.
 - The plugin makes **no network requests** and writes no files of its own. Right-clicking saves your chosen bar reading in `shell.json` through the shell's normal widget settings.
 - It only signals a process after you confirm, and only processes owned by your user.
 
 ## Tests
 
+From a clone of this repository (needs Node.js 20 or later, on Linux):
+
 ```bash
-node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/
+node --test tests/*.test.js
 ```
+
+Or against the installed copy:
+
+```bash
+node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/*.test.js
+```
+
+The tests run the real helper script, so they start and stop a few `sleep` processes of their own. They never touch other processes. The same tests and `shellcheck` run on every push.
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

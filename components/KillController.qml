@@ -90,9 +90,9 @@ Item {
   }
 
   function onChecked(raw) {
-    var alive = Model.parseAlive(raw)
-    if (!alive) return
     var checked = controller.checking
+    var alive = Model.parseAlive(raw, checked.length)
+    if (!alive) return
     controller.stopping.filter(function(s) {
       return checked.indexOf(s.pid) >= 0 && !alive[s.pid]
     }).forEach(function(s) {

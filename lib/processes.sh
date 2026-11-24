@@ -1,10 +1,14 @@
 # Process list and process stopping for bin/system-monitor.
 
-# Never offered for stopping, because losing them ends or breaks the desktop session.
+# Never offered for stopping, because losing them ends or breaks the desktop session,
+# unlocks or disables the lock screen, or loses saved secrets for the session.
 # Names are as in /proc/<pid>/comm, which cuts them to 15 characters.
+# This guards against a mistaken click, not against a hostile process: any program can
+# give itself one of these names, and then it can't be stopped from the panel.
 is_protected() {
   case $1 in
-    Hyprland | quickshell | Xwayland | systemd | "(sd-pam)" | dbus-* | uwsm* | pipewire* | wireplumber | xdg-desktop-por*) return 0 ;;
+    Hyprland | start-hyprland | quickshell | Xwayland | systemd | "(sd-pam)" | dbus-* | uwsm* | \
+      pipewire* | wireplumber | xdg-desktop-por* | hyprlock | hypridle | gnome-keyring-d) return 0 ;;
   esac
   return 1
 }
@@ -47,8 +51,9 @@ top_procs() {
   # top's first frame has no time delta (every process reads 0.0), so take a second frame
   # half a second later and keep only that one.
   # top reports 100% per core, so divide by the core count to get a share of the whole CPU,
-  # matching the panel's overall meter.
-  HOME=$cfg XDG_CONFIG_HOME=$cfg top -b -n2 -d0.5 -w 512 -o %CPU 2>/dev/null | awk -v cores="$(nproc 2>/dev/null || echo 1)" '
+  # matching the panel's overall meter, which covers the same CPUs listed in /proc/stat.
+  HOME=$cfg XDG_CONFIG_HOME=$cfg top -b -n2 -d0.5 -w 512 -o %CPU 2>/dev/null | awk '
+    NR == FNR { if ($1 ~ /^cpu[0-9]/) cores++; next }
     $1 == "PID" { frame++; n = 0; next }
     frame == 2 && NF >= 12 && n < 50 {
       name = $12
@@ -57,7 +62,7 @@ top_procs() {
       printf "proc\t%s\t%.1f\t%s\t%s\n", $1, $9 / (cores > 0 ? cores : 1), $10, name
       n++
     }
-  ' | mark_killable
+  ' /proc/stat - | mark_killable
   rm -rf -- "$cfg"
 }
 

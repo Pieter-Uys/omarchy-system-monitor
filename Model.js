@@ -43,7 +43,7 @@ function reading(sample, prevCpu) {
     memFraction: NaN, memUsedKb: NaN, memTotalKb: NaN,
     swapFraction: NaN, swapUsedKb: NaN, swapTotalKb: NaN,
     load: [], uptimeSec: NaN, cores: 1,
-    cpuTemp: NaN, gpuTemp: NaN
+    cpuTemp: NaN, gpuTemp: NaN, gpuAsleep: false
   }
 
   if (sample.cpu) {
@@ -98,6 +98,8 @@ function reading(sample, prevCpu) {
 
   r.cpuTemp = tempC(sample.cputemp ? sample.cputemp[0] : undefined)
   r.gpuTemp = tempC(sample.gputemp ? sample.gputemp[0] : undefined)
+  // A powered-down card is shown as asleep; the helper never wakes it to read it.
+  r.gpuAsleep = Number.isNaN(r.gpuTemp) &&!!sample.gpusleep && sample.gpusleep[0] === "1"
   return r
 }
 
@@ -140,10 +142,12 @@ function parseKillResult(raw) {
   return ["sent", "gone", "changed", "refused"].indexOf(s) >= 0 ? s : "refused"
 }
 
-// The PIDs a --check found running, or null if the check didn't finish.
-function parseAlive(raw) {
+// The PIDs a --check of `asked` processes found running, or null if the check didn't finish.
+function parseAlive(raw, asked) {
   var lines = String(raw || "").trim().split("\n")
-  if (lines[lines.length - 1] !== "ok" || lines.length > MAX_PROCS + 1) return null
+  var limit = asked >= 0 ? asked : MAX_PROCS
+  // Not lines.at(-1): the shell's JavaScript engine (Qt 6.12) has no Array.prototype.at.
+  if (lines[lines.length - 1] !== "ok" || lines.length > limit + 1) return null // NOSONAR javascript:S7755
   var alive = {}
   for (var i = 0; i < lines.length - 1; i++) {
     var p = lines[i].split("\t")
@@ -207,6 +211,7 @@ function meter(key, stats) {
   case "cpuTemp":
     return { visible: !isNaN(stats.cpuTemp), fraction: stats.cpuTemp / 100, level: tempLevel(stats.cpuTemp) }
   case "gpuTemp":
+    if (stats.gpuAsleep) return { visible: true, fraction: 0, level: "normal" }
     return { visible: !isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, level: tempLevel(stats.gpuTemp) }
   }
   return { visible: false, fraction: NaN, level: "normal" }

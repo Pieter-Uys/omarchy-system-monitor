@@ -2,7 +2,8 @@
 # Local system readings for the system-monitor bar widget.
 # Reads only /proc and /sys (plus `top` for the process list); never uses the network.
 #
-#   system-monitor          tab-separated sample: cpu, mem, swap, load, uptime, cores, temps
+#   system-monitor          tab-separated sample: cpu, mem, swap, load, uptime, cores, CPU temp
+#   system-monitor --gpu    the same plus the GPU temperature (gputemp), or gpusleep if it's powered down
 #   system-monitor --top    the 50 busiest processes as:
 #                           proc <pid> <cpu%> <mem%> <killable 0|1> <start-ticks> <name>
 #   system-monitor --kill <pid> <start-ticks> [--force]
@@ -14,11 +15,14 @@ set -u
 export LC_ALL=C
 
 lib=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib
+# shellcheck source=SCRIPTDIR/../lib/sample.sh
 source "$lib/sample.sh"
+# shellcheck source=SCRIPTDIR/../lib/processes.sh
 source "$lib/processes.sh"
 
 case "${1:-}" in
   "") sample ;;
+  --gpu) sample --gpu ;;
   --top) top_procs ;;
   --kill)
     shift
@@ -29,7 +33,7 @@ case "${1:-}" in
     check_procs "$@"
     ;;
   *)
-    echo "Usage: system-monitor [--top | --kill <pid> <start> [--force] | --check <pid> <start>...]" >&2
+    echo "Usage: system-monitor [--gpu | --top | --kill <pid> <start> [--force] | --check <pid> <start>...]" >&2
     exit 1
     ;;
 esac

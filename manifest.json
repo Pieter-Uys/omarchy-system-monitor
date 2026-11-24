@@ -5,7 +5,8 @@
   "version": "1.0.0",
   "author": "Pieter-Uys",
   "license": "MIT",
-  "description": "CPU, memory and temperature in the bar, with a panel of detailed readings and the busiest processes. Reads /proc and /sys locally; no network access.",
+  "homepage": "https://github.com/Pieter-Uys/omarchy-system-monitor",
+  "description": "CPU, memory and temperature in the bar, with a panel of detailed readings and the busiest processes. Reads /proc, /sys and nvidia-smi locally; no network access.",
   "kinds": [
     "bar-widget"
   ],
