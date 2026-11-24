@@ -263,7 +263,7 @@ function temps(args, sys, stubs) {
     const r = run(args, TOP_OUTPUT, { sys, stubs })
     assert.strictEqual(r.status, 0)
     assert.strictEqual(r.stderr, "")
-    return r.stdout.split("\n").filter(l => /^(cputemp|gputemp|gpusleep)\t/.test(l))
+    return r.stdout.split("\n").filter(l => /^(cputemp|gputemp|gpuload|gpusleep)\t/.test(l))
   } finally {
     fs.rmSync(sys, { recursive: true, force: true })
   }
@@ -283,12 +283,25 @@ test("an NVIDIA card is read through nvidia-smi instead of the CPU's graphics", 
   assert.deepStrictEqual(temps(["--gpu"], sys, { "nvidia-smi": "echo 61" }), ["gputemp\t61000"])
 })
 
+test("an NVIDIA card's load comes from the same nvidia-smi call, and [N/A] is left out", () => {
+  const card = () => fakeSys([AMD_IGPU], [{ bus: "0000:01:00.0" }])
+  assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '61, 37'" }), ["gputemp\t61000", "gpuload\t37"])
+  assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '61, [N/A]'" }), ["gputemp\t61000"])
+  assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '61, 250'" }), ["gputemp\t61000"])
+})
+
+test("an AMD GPU's load is read from gpu_busy_percent", () => {
+  const sys = fakeSys([AMD_CARD])
+  fs.writeFileSync(path.join(sys, "devices", "hwmon0", "gpu_busy_percent"), "42\n")
+  assert.deepStrictEqual(temps(["--gpu"], sys), ["gputemp\t66000", "gpuload\t42"])
+})
+
 test("nvidia-smi is asked about the awake card only", () => {
   const sys = fakeSys([], [{ bus: "0000:01:00.0", asleep: true }, { bus: "0000:02:00.0" }])
   const log = path.join(os.tmpdir(), `system-monitor-nvsmi-${process.pid}`)
   try {
     assert.deepStrictEqual(temps(["--gpu"], sys, { "nvidia-smi": `echo "$@" > "${log}"; echo 61` }), ["gputemp\t61000"])
-    assert.match(fs.readFileSync(log, "utf8"), /^-i 0000:02:00\.0 --query-gpu=temperature\.gpu /)
+    assert.match(fs.readFileSync(log, "utf8"), /^-i 0000:02:00\.0 --query-gpu=temperature\.gpu,utilization\.gpu /)
   } finally {
     fs.rmSync(log, { force: true })
   }

@@ -210,33 +210,45 @@ test("programs being stopped stay pinned at the top with live readings", () => {
 })
 
 test("meters keep their order and have translated labels", () => {
-  assert.deepStrictEqual(Array.from(M.METERS), ["cpu", "memory", "swap", "cpuTemp", "gpuTemp"])
+  assert.deepStrictEqual(Array.from(M.METERS), ["cpu", "gpu", "memory", "swap"])
   const en = JSON.parse(fs.readFileSync(path.join(root, "i18n", "en.json"), "utf8"))
   for (const key of M.METERS) assert.ok(key in en, `missing i18n key: ${key}`)
 })
 
-test("each meter's visibility, fill and level", () => {
-  const stats = { cpu: 0.8, memFraction: 0.95, swapTotalKb: 1000, swapFraction: 0.5, cpuTemp: 72, gpuTemp: 90 }
-  const read = key => { const m = M.meter(key, stats); return [m.visible, m.fraction, m.level] }
-  assert.deepStrictEqual(read("cpu"), [true, 0.8, "warm"])
-  assert.deepStrictEqual(read("memory"), [true, 0.95, "hot"])
-  assert.deepStrictEqual(read("swap"), [true, 0.5, "normal"])
-  assert.deepStrictEqual(read("cpuTemp"), [true, 0.72, "warm"])
-  assert.deepStrictEqual(read("gpuTemp"), [true, 0.9, "hot"])
+test("each meter's visibility, fill, temperature and level", () => {
+  const stats = { cpu: 0.5, memFraction: 0.95, swapTotalKb: 1000, swapFraction: 0.5, cpuTemp: 72, gpuTemp: 90, gpuLoad: 0.3 }
+  const read = key => { const m = M.meter(key, stats); return [m.visible, m.fraction, m.temp, m.level] }
+  // CPU and GPU tint for whichever of load and temperature runs hotter.
+  assert.deepStrictEqual(read("cpu"), [true, 0.5, 72, "warm"])
+  assert.deepStrictEqual(read("gpu"), [true, 0.3, 90, "hot"])
+  assert.deepStrictEqual(read("memory"), [true, 0.95, NaN, "hot"])
+  assert.deepStrictEqual(read("swap"), [true, 0.5, NaN, "normal"])
+})
+
+test("a GPU without a load reading shows its temperature in the bar instead", () => {
+  const m = M.meter("gpu", { gpuTemp: 66, gpuLoad: NaN })
+  assert.deepStrictEqual([m.visible, m.fraction, m.level], [true, 0.66, "normal"])
+  assert.ok(isNaN(m.temp), "the temperature isn't repeated in the label")
+  assert.strictEqual(M.meter("gpu", { gpuTemp: NaN, gpuLoad: NaN }).visible, false)
+  const loadOnly = M.meter("gpu", { gpuTemp: NaN, gpuLoad: 0.4 })
+  assert.deepStrictEqual([loadOnly.visible, loadOnly.fraction], [true, 0.4])
+  assert.ok(isNaN(loadOnly.temp))
+})
+
+test("GPU load is read as a whole percentage and anything else is dropped", () => {
+  assert.strictEqual(M.reading(M.parseSample("gpuload\t37"), null).gpuLoad, 0.37)
+  for (const bad of ["101", "-1", "3.5", "<b>9</b>", ""]) {
+    assert.ok(isNaN(M.reading(M.parseSample(`gpuload\t${bad}`), null).gpuLoad), bad)
+  }
 })
 
 test("meters handle no swap and missing readings", () => {
   const noSwap = M.meter("swap", { swapTotalKb: 0, swapFraction: NaN })
   assert.deepStrictEqual([noSwap.visible, noSwap.fraction, noSwap.level], [true, 0, "normal"])
   assert.strictEqual(M.meter("swap", { swapTotalKb: NaN, swapFraction: NaN }).visible, false)
-  for (const key of ["cpuTemp", "gpuTemp"]) {
-    const m = M.meter(key, { cpuTemp: NaN, gpuTemp: NaN })
-    assert.strictEqual(m.visible, false)
-    assert.ok(isNaN(m.fraction))
-    assert.strictEqual(m.level, "normal")
-  }
-  const cpu = M.meter("cpu", { cpu: NaN })
+  const cpu = M.meter("cpu", { cpu: NaN, cpuTemp: NaN })
   assert.deepStrictEqual([cpu.visible, cpu.level], [true, "normal"])
+  assert.ok(isNaN(cpu.temp))
   assert.strictEqual(M.meter("unknown", {}).visible, false)
 })
 
@@ -244,10 +256,12 @@ test("a sleeping GPU shows as asleep, never as a temperature", () => {
   const asleep = M.reading(M.parseSample("gpusleep\t1"), null)
   assert.strictEqual(asleep.gpuAsleep, true)
   assert.ok(isNaN(asleep.gpuTemp))
-  const m = M.meter("gpuTemp", asleep)
+  const m = M.meter("gpu", asleep)
   assert.deepStrictEqual([m.visible, m.fraction, m.level], [true, 0, "normal"])
+  assert.ok(isNaN(m.temp))
   // A real reading wins, and anything but "1" isn't a sleep report.
   assert.strictEqual(M.reading(M.parseSample("gputemp\t61000\ngpusleep\t1"), null).gpuAsleep, false)
+  assert.strictEqual(M.reading(M.parseSample("gpuload\t5\ngpusleep\t1"), null).gpuAsleep, false)
   assert.strictEqual(M.reading(M.parseSample("gpusleep\tyes"), null).gpuAsleep, false)
   assert.strictEqual(M.reading({}, null).gpuAsleep, false)
 })

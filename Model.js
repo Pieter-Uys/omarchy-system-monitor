@@ -45,7 +45,7 @@ function reading(sample, prevCpu) {
     memFraction: NaN, memUsedKb: NaN, memTotalKb: NaN,
     swapFraction: NaN, swapUsedKb: NaN, swapTotalKb: NaN,
     load: [], uptimeSec: NaN, cores: 1,
-    cpuTemp: NaN, gpuTemp: NaN, gpuAsleep: false
+    cpuTemp: NaN, gpuTemp: NaN, gpuLoad: NaN, gpuAsleep: false
   }
 
   if (sample.cpu) {
@@ -100,8 +100,10 @@ function reading(sample, prevCpu) {
 
   r.cpuTemp = tempC(sample.cputemp ? sample.cputemp[0] : undefined)
   r.gpuTemp = tempC(sample.gputemp ? sample.gputemp[0] : undefined)
+  var gl = toInt(sample.gpuload ? sample.gpuload[0] : undefined)
+  if (gl >= 0 && gl <= 100) r.gpuLoad = gl / 100
   // A powered-down card is shown as asleep; the helper never wakes it to read it.
-  r.gpuAsleep = Number.isNaN(r.gpuTemp) &&!!sample.gpusleep && sample.gpusleep[0] === "1"
+  r.gpuAsleep = Number.isNaN(r.gpuTemp) && Number.isNaN(r.gpuLoad) && !!sample.gpusleep && sample.gpusleep[0] === "1"
   return r
 }
 
@@ -227,28 +229,35 @@ function tempLevel(c) {
 }
 
 // The panel's meters, in display order. Each key is also its translation key.
-var METERS = ["cpu", "memory", "swap", "cpuTemp", "gpuTemp"]
+// CPU and GPU carry their temperature in the label, so there's no separate temperature row.
+var METERS = ["cpu", "gpu", "memory", "swap"]
 
-// Whether a meter shows, how full it is, and its warning level.
+// Whether a meter shows, how full it is, its warning level, and the temperature beside its
+// label (NaN for none). A meter tints for whichever of its load and temperature runs hotter.
 function meter(key, stats) {
   switch (key) {
   case "cpu":
-    return { visible: true, fraction: stats.cpu, level: level(stats.cpu) }
+    return { visible: true, fraction: stats.cpu, temp: stats.cpuTemp,
+      level: worstLevel(level(stats.cpu), tempLevel(stats.cpuTemp)) }
+  case "gpu":
+    if (stats.gpuAsleep) return { visible: true, fraction: 0, temp: NaN, level: "normal" }
+    // Without a load reading (NVIDIA under nouveau, Intel, radeon), the bar shows temperature.
+    if (isNaN(stats.gpuLoad)) {
+      return { visible: !isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, temp: NaN, level: tempLevel(stats.gpuTemp) }
+    }
+    return { visible: true, fraction: stats.gpuLoad, temp: stats.gpuTemp,
+      level: worstLevel(level(stats.gpuLoad), tempLevel(stats.gpuTemp)) }
   case "memory":
-    return { visible: true, fraction: stats.memFraction, level: level(stats.memFraction) }
+    return { visible: true, fraction: stats.memFraction, temp: NaN, level: level(stats.memFraction) }
   case "swap":
     return {
       visible: !isNaN(stats.swapTotalKb),
       fraction: stats.swapTotalKb === 0 ? 0 : stats.swapFraction,
+      temp: NaN,
       level: level(stats.swapFraction)
     }
-  case "cpuTemp":
-    return { visible: !isNaN(stats.cpuTemp), fraction: stats.cpuTemp / 100, level: tempLevel(stats.cpuTemp) }
-  case "gpuTemp":
-    if (stats.gpuAsleep) return { visible: true, fraction: 0, level: "normal" }
-    return { visible: !isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, level: tempLevel(stats.gpuTemp) }
   }
-  return { visible: false, fraction: NaN, level: "normal" }
+  return { visible: false, fraction: NaN, temp: NaN, level: "normal" }
 }
 
 function gib(kb) {

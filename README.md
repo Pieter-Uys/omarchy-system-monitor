@@ -23,9 +23,10 @@ An Omarchy shell bar widget that shows CPU and memory usage with their icons (or
 
 | | |
 |---|---|
-| **Meters** | CPU, memory, swap, CPU temperature and GPU temperature, tinted as they run hot. With a graphics card, the GPU reading is the card's, not the graphics built into the CPU |
+| **Meters** | CPU, GPU, memory and swap, with the CPU and GPU temperature beside their names (`CPU · 58°C`). Each meter tints when its load or temperature runs hot. With a graphics card, the GPU reading is the card's, not the graphics built into the CPU |
 | **System info** | Load average, core count and uptime |
 | **Program list** | The 12 heaviest programs, with each program's processes added up into one row (`brave ×33 · 5.9 GiB`). Click the **CPU** or **Memory** heading to sort by it; memory is the default. Refreshed while the panel is open |
+| **Open btop** | A link at the bottom of the panel opens `btop`, or brings it forward if it's already open |
 | **Safe process control** | Programs that are safe to stop have a stop button, with a confirmation step. Stopping a program stops all of its processes |
 
 ### Process control
@@ -100,6 +101,7 @@ omarchy plugin remove io.github.pieter-uys.system-monitor
 |---|---|
 | CPU | AMD (`k10temp`, `zenpower`), Intel (`coretemp`) and Raspberry Pi (`cpu_thermal`). The package or die sensor is preferred |
 | GPU | NVIDIA on NVIDIA's driver (through `nvidia-smi`), NVIDIA on `nouveau`, AMD (`amdgpu`, `radeon`) and Intel Arc on `xe` |
+| GPU load | NVIDIA on NVIDIA's driver (from the same `nvidia-smi` call) and AMD on `amdgpu` (`gpu_busy_percent`). Elsewhere the GPU meter shows the temperature instead |
 
 - When a machine has both a graphics card and graphics built into the CPU, the card is reported.
 - A card that has powered itself down (common on laptops) shows as **Asleep**. It is never woken up just to be read.

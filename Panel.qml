@@ -74,8 +74,19 @@ Panel {
     if (key === "cpu") return root.pct(s.cpu)
     if (key === "memory") return root.memText(s.memUsedKb, s.memTotalKb)
     if (key === "swap") return s.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(s.swapUsedKb, s.swapTotalKb)
-    if (key === "gpuTemp" && s.gpuAsleep) return strings.t("gpuAsleep")
-    return root.deg(key === "cpuTemp" ? s.cpuTemp : s.gpuTemp)
+    if (s.gpuAsleep) return strings.t("gpuAsleep")
+    return isNaN(s.gpuLoad) ? root.deg(s.gpuTemp) : root.pct(s.gpuLoad)
+  }
+
+  // "CPU · 58°C" when the meter has a temperature, else just its name.
+  function meterLabel(key, temp) {
+    return isNaN(temp) ? strings.t(key) : strings.t("withTemp").arg(strings.t(key)).arg(root.deg(temp))
+  }
+
+  // Hands the full picture to btop, raising it if it's already open.
+  function openBtop() {
+    root.close()
+    Quickshell.execDetached(["omarchy", "launch", "or", "focus", "tui", "btop"])
   }
 
   function sizeText(kb) {
@@ -135,6 +146,7 @@ Panel {
     // vanish; if the panel is open, read the GPU straight away.
     if (!withGpu) {
       next.gpuTemp = root.stats.gpuTemp
+      next.gpuLoad = root.stats.gpuLoad
       next.gpuAsleep = root.stats.gpuAsleep
       if (root.opened) warmup.restart()
     }
@@ -363,7 +375,7 @@ Panel {
             foreground: root.fg
             fontFamily: root.fontFamily
             visible: reading.visible
-            label: strings.t(modelData)
+            label: root.meterLabel(modelData, reading.temp)
             value: root.meterValue(modelData)
             fraction: reading.fraction
             tint: root.levelColor(reading.level)
@@ -448,6 +460,25 @@ Panel {
                 }
               }
             }
+          }
+        }
+
+        // Anything the panel doesn't cover is one click away in btop.
+        PlainText {
+          anchors.horizontalCenter: parent.horizontalCenter
+          text: strings.t("openBtop")
+          color: root.fg
+          opacity: btopMouse.containsMouse ? 1 : 0.55
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+
+          MouseArea {
+            id: btopMouse
+            anchors.fill: parent
+            anchors.margins: -Style.space(4)
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.openBtop()
           }
         }
       }

@@ -7,6 +7,8 @@
 - Click the **CPU** or **Memory** heading to sort by it. The list now starts sorted by memory.
 - The list shows the 12 heaviest programs, so it fits without much scrolling.
 - The **Stop** heading is gone; the stop button on each row is enough.
+- The GPU meter now shows how busy the GPU is, on NVIDIA's driver and on AMD, with its temperature beside the name (`GPU · 42°C`). The CPU meter shows its temperature the same way, so the separate temperature rows are gone and the panel is shorter.
+- **Open btop** at the bottom of the panel opens `btop`, or brings it forward if it's already open.
 
 After updating, restart the shell (`omarchy restart shell`) so it loads the new panel.
 

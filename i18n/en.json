@@ -3,8 +3,8 @@
   "cpu": "CPU",
   "memory": "Memory",
   "swap": "Swap",
-  "cpuTemp": "CPU temp",
-  "gpuTemp": "GPU temp",
+  "gpu": "GPU",
+  "withTemp": "%1 · %2",
   "load": "Load",
   "uptime": "Up",
   "noSwap": "None",
@@ -30,5 +30,6 @@
   "tooltip": "CPU %1 · Memory %2 · %3",
   "groupName": "%1 ×%2",
   "sizeMiB": "%1 MiB",
-  "sizeGiB": "%1 GiB"
+  "sizeGiB": "%1 GiB",
+  "openBtop": "Open btop"
 }
