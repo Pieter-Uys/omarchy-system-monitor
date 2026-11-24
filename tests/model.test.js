@@ -224,3 +224,11 @@ test("a check can report no more processes than it was asked about", () => {
   assert.strictEqual(Object.keys(M.parseAlive(many, 60)).length, 60)
   assert.strictEqual(M.parseAlive(many), null)
 })
+
+test("code the shell runs avoids JavaScript its engine lacks", () => {
+  // The shell's engine (Qt 6.12) has no Array.prototype.at, though Node, which runs these
+  // tests, does, so a stray .at() would pass here and fail in the shell.
+  const code = fs.readFileSync(path.join(root, "Model.js"), "utf8") + "\n" + allQml()
+  const withoutComments = code.replace(/\/\/.*$/gm, "")
+  assert.doesNotMatch(withoutComments, /\.at\(/)
+})

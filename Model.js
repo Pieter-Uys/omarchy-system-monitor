@@ -99,7 +99,7 @@ function reading(sample, prevCpu) {
   r.cpuTemp = tempC(sample.cputemp ? sample.cputemp[0] : undefined)
   r.gpuTemp = tempC(sample.gputemp ? sample.gputemp[0] : undefined)
   // A powered-down card is shown as asleep; the helper never wakes it to read it.
-  r.gpuAsleep = isNaN(r.gpuTemp) && !!sample.gpusleep && sample.gpusleep[0] === "1"
+  r.gpuAsleep = Number.isNaN(r.gpuTemp) &&!!sample.gpusleep && sample.gpusleep[0] === "1"
   return r
 }
 
@@ -146,7 +146,8 @@ function parseKillResult(raw) {
 function parseAlive(raw, asked) {
   var lines = String(raw || "").trim().split("\n")
   var limit = asked >= 0 ? asked : MAX_PROCS
-  if (lines[lines.length - 1] !== "ok" || lines.length > limit + 1) return null
+  // Not lines.at(-1): the shell's JavaScript engine (Qt 6.12) has no Array.prototype.at.
+  if (lines[lines.length - 1] !== "ok" || lines.length > limit + 1) return null // NOSONAR javascript:S7755
   var alive = {}
   for (var i = 0; i < lines.length - 1; i++) {
     var p = lines[i].split("\t")

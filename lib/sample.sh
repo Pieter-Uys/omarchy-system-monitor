@@ -62,6 +62,7 @@ cpu_temp() {
       k10temp | coretemp | zenpower | cpu_thermal)
         emit_temp cputemp "$h" Tctl Tdie "Package id 0" && return
         ;;
+      *) ;;
     esac
   done
 }
