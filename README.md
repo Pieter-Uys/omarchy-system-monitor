@@ -11,7 +11,7 @@
 
 [Install](#install) · [Usage](#usage) · [Settings](#settings) · [IPC](#ipc) · [Privacy](#privacy) · [Tests](#tests)
 
-![The System Stats panel: CPU, GPU, memory and swap meters, and the heaviest programs](preview.png)
+![System Stats in the bar, with its panel open: CPU, GPU, memory and swap meters, and the heaviest programs](preview.png)
 
 </div>
 
