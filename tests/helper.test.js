@@ -1,4 +1,4 @@
-// Locks in the helper's output. Run with: node --test ~/.config/omarchy/plugins/system-monitor/tests/
+// Locks in the helper's output. Run with: node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/
 const test = require("node:test")
 const assert = require("node:assert")
 const fs = require("node:fs")

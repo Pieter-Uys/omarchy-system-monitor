@@ -21,10 +21,22 @@ On a new Omarchy install:
 omarchy plugin add https://github.com/Pieter-Uys/omarchy-system-monitor.git --enable
 ```
 
-Choose the `right` section when asked. To get later changes:
+Choose the `right` section when asked, or move it later:
 
 ```bash
-omarchy plugin update system-monitor
+omarchy bar move io.github.pieter-uys.system-monitor --section right
+```
+
+To get later changes:
+
+```bash
+omarchy plugin update io.github.pieter-uys.system-monitor
+```
+
+To remove it:
+
+```bash
+omarchy plugin remove io.github.pieter-uys.system-monitor
 ```
 
 ## Settings
@@ -37,8 +49,8 @@ omarchy plugin update system-monitor
 ## IPC
 
 ```bash
-omarchy-shell system-monitor toggle
-omarchy-shell system-monitor cycleLabel
+omarchy-shell io.github.pieter-uys.system-monitor toggle
+omarchy-shell io.github.pieter-uys.system-monitor cycleLabel
 ```
 
 ## Privacy
@@ -50,5 +62,9 @@ process after you confirm, and only processes owned by your user.
 ## Tests
 
 ```bash
-node --test ~/.config/omarchy/plugins/system-monitor/tests/
+node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).

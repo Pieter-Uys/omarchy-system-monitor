@@ -13,8 +13,8 @@ import "components"
 // /proc and /sys only. Every displayed string is plain text.
 Panel {
   id: root
-  moduleName: "system-monitor"
-  ipcTarget: "system-monitor"
+  moduleName: "io.github.pieter-uys.system-monitor"
+  ipcTarget: "io.github.pieter-uys.system-monitor"
   manageIpc: false
 
   readonly property string helperPath: String(Qt.resolvedUrl("bin/system-monitor")).replace(/^file:\/\//, "")
@@ -123,7 +123,7 @@ Panel {
   }
 
   ShellIpc {
-    target: "system-monitor"
+    target: "io.github.pieter-uys.system-monitor"
     function open() { root.open() }
     function close() { root.close() }
     function show() { root.open() }
