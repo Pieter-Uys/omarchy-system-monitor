@@ -53,8 +53,9 @@ function run(args, topOutput = TOP_OUTPUT, { sys, stubs = {} } = {}) {
   }
 }
 
-// Resident memory in KiB, read the way the helper reads it.
-const rssOf = pid => Number(fs.readFileSync(`/proc/${pid}/statm`, "utf8").split(" ")[1]) * 4
+// Resident memory in KiB, read the way the helper reads it, with this system's page size.
+const PAGE_KB = Number(spawnSync("getconf", ["PAGESIZE"], { encoding: "utf8" }).stdout.trim()) / 1024
+const rssOf = pid => Number(fs.readFileSync(`/proc/${pid}/statm`, "utf8").split(" ")[1]) * PAGE_KB
 
 test("--top reports the second frame as a share of all cores, with no memory for a vanished process", () => {
   const r = run(["--top"])
@@ -306,6 +307,9 @@ test("an NVIDIA card's load comes from the same nvidia-smi call, and [N/A] is le
   assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '61, 37'" }), ["gputemp\t61000", "gpuload\t37"])
   assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '61, [N/A]'" }), ["gputemp\t61000"])
   assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '61, 250'" }), ["gputemp\t61000"])
+  // A card without a temperature sensor still shows its load.
+  assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '[N/A], 37'" }), ["gpuload\t37"])
+  assert.deepStrictEqual(temps(["--gpu"], card(), { "nvidia-smi": "echo '[N/A], [N/A]'" }), [])
 })
 
 test("an AMD GPU's load is read from gpu_busy_percent", () => {
