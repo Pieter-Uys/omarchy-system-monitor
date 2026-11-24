@@ -1,7 +1,8 @@
-// Pure parsing and formatting helpers for system-monitor.
+// Pure parsing, grouping and level helpers for system-monitor; display text is in Format.js.
 // Everything read from the helper script is treated as untrusted and bounded here.
 
-var MAX_LINES = 64
+// Bounds for one sample from the helper: how many lines, and fields per line.
+var MAX_SAMPLE_LINES = 64
 var MAX_FIELDS = 8
 // The helper lists every process so each program's can be added up; the panel shows the top few.
 var MAX_PROCS = 4000
@@ -28,7 +29,7 @@ function clamp(value, lo, hi) {
 function parseSample(raw) {
   var out = {}
   var lines = String(raw || "").split("\n")
-  for (var i = 0; i < lines.length && i < MAX_LINES; i++) {
+  for (var i = 0; i < lines.length && i < MAX_SAMPLE_LINES; i++) {
     var parts = lines[i].split("\t")
     if (parts.length < 2) continue
     var key = parts[0]
@@ -173,13 +174,6 @@ function compareNames(a, b) {
   return 0
 }
 
-// { value, unit } for a size in KiB: whole MiB below 1 GiB, else GiB to one decimal.
-function size(kb) {
-  if (Number.isNaN(kb) || kb < 0) return null
-  if (kb < 1048576) return { value: Math.max(0, Math.round(kb / 1024)), decimals: 0, unit: "MiB" }
-  return { value: kb / 1048576, decimals: 1, unit: "GiB" }
-}
-
 // Anything unexpected from the helper counts as refused.
 function parseKillResult(raw) {
   var s = String(raw || "").trim()
@@ -265,10 +259,6 @@ function meter(key, stats) {
     }
   }
   return { visible: false, fraction: Number.NaN, temp: Number.NaN, level: "normal" }
-}
-
-function gib(kb) {
-  return kb / 1048576
 }
 
 // Split seconds into { days, hours, minutes } for translated formatting.

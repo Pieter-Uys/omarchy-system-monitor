@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
+import "Format.js" as Format
 import "components"
 
 // System Stats: a CPU/memory/temperature readout in the bar with a detail
@@ -52,36 +53,12 @@ Panel {
     return root.fg
   }
 
-  function pct(fraction) {
-    if (isNaN(fraction)) return "—"
-    return strings.t("percent").arg(Commons.I18n.formatNumber(Math.round(fraction * 100)))
-  }
-
-  function deg(c) {
-    if (isNaN(c)) return "—"
-    return strings.t("degrees").arg(Commons.I18n.formatNumber(Math.round(c)))
-  }
-
-  function memText(usedKb, totalKb) {
-    if (isNaN(usedKb) || isNaN(totalKb)) return "—"
-    return strings.t("memValue")
-      .arg(Commons.I18n.formatNumber(Model.gib(usedKb), 1))
-      .arg(Commons.I18n.formatNumber(Model.gib(totalKb), 1))
-  }
-
-  function meterValue(key) {
-    var s = root.stats
-    if (key === "cpu") return root.pct(s.cpu)
-    if (key === "memory") return root.memText(s.memUsedKb, s.memTotalKb)
-    if (key === "swap") return s.swapTotalKb === 0 ? strings.t("noSwap") : root.memText(s.swapUsedKb, s.swapTotalKb)
-    if (s.gpuAsleep) return strings.t("gpuAsleep")
-    return isNaN(s.gpuLoad) ? root.deg(s.gpuTemp) : root.pct(s.gpuLoad)
-  }
-
-  // "CPU · 58°C" when the meter has a temperature, else just its name.
-  function meterLabel(key, temp) {
-    return isNaN(temp) ? strings.t(key) : strings.t("withTemp").arg(strings.t(key)).arg(root.deg(temp))
-  }
+  // What Format.js needs to write display text: this plugin's strings and Omarchy's number
+  // formatting for the current language.
+  readonly property var fx: ({
+    t: function(key) { return strings.t(key) },
+    num: function(value, decimals) { return Commons.I18n.formatNumber(value, decimals) }
+  })
 
   // Hands the full picture to btop, raising it if it's already open.
   function openBtop() {
@@ -89,29 +66,10 @@ Panel {
     Quickshell.execDetached(["omarchy", "launch", "or", "focus", "tui", "btop"])
   }
 
-  function sizeText(kb) {
-    var z = Model.size(kb)
-    if (!z) return "—"
-    return strings.t(z.unit === "GiB" ? "sizeGiB" : "sizeMiB").arg(Commons.I18n.formatNumber(z.value, z.decimals))
-  }
-
-  function groupName(row) {
-    return row.count > 1 ? strings.t("groupName").arg(row.name).arg(Commons.I18n.formatNumber(row.count)) : row.name
-  }
-
-  function uptimeText(sec) {
-    var p = Model.uptimeParts(sec)
-    if (!p) return ""
-    var f = Commons.I18n.formatNumber
-    if (p.days > 0) return strings.t("uptimeDays").arg(f(p.days)).arg(f(p.hours))
-    if (p.hours > 0) return strings.t("uptimeHours").arg(f(p.hours)).arg(f(p.minutes))
-    return strings.t("uptimeMinutes").arg(f(p.minutes))
-  }
-
   readonly property string barText: {
-    if (barLabel === "Memory") return pct(stats.memFraction)
+    if (barLabel === "Memory") return Format.pct(root.fx, stats.memFraction)
     if (barLabel === "Temperature") return isNaN(stats.cpuTemp) ? "—" : Commons.I18n.formatNumber(Math.round(stats.cpuTemp)) + "°"
-    if (barLabel === "CPU") return pct(stats.cpu)
+    if (barLabel === "CPU") return Format.pct(root.fx, stats.cpu)
     return ""
   }
 
@@ -220,9 +178,9 @@ Panel {
   implicitHeight: combined ? comboButton.implicitHeight : button.implicitHeight
 
   readonly property string barTooltip: root.opened ? "" : strings.t("tooltip")
-    .arg(root.pct(root.stats.cpu))
-    .arg(root.pct(root.stats.memFraction))
-    .arg(root.deg(root.stats.cpuTemp))
+    .arg(Format.pct(root.fx, root.stats.cpu))
+    .arg(Format.pct(root.fx, root.stats.memFraction))
+    .arg(Format.deg(root.fx, root.stats.cpuTemp))
 
   function onBarPressed(b) {
     if (b === Qt.RightButton) root.cycleLabel()
@@ -251,7 +209,7 @@ Panel {
 
       BarStat {
         glyph: root.chipGlyph
-        value: root.pct(root.stats.cpu)
+        value: Format.pct(root.fx, root.stats.cpu)
         tint: comboButton.foreground
         bar: root.bar
         fontFamily: root.fontFamily
@@ -259,7 +217,7 @@ Panel {
 
       BarStat {
         glyph: root.memGlyph
-        value: root.pct(root.stats.memFraction)
+        value: Format.pct(root.fx, root.stats.memFraction)
         tint: comboButton.foreground
         bar: root.bar
         fontFamily: root.fontFamily
@@ -349,7 +307,7 @@ Panel {
           title: strings.t("title")
           meta: {
             var parts = [strings.tn("coresMeta", root.stats.cores).arg(Commons.I18n.formatNumber(root.stats.cores))]
-            var up = root.uptimeText(root.stats.uptimeSec)
+            var up = Format.uptimeText(root.fx, Model.uptimeParts(root.stats.uptimeSec))
             if (up !== "") parts.push(strings.t("uptime") + " " + up)
             return parts.join(" · ")
           }
@@ -375,8 +333,8 @@ Panel {
             foreground: root.fg
             fontFamily: root.fontFamily
             visible: reading.visible
-            label: root.meterLabel(modelData, reading.temp)
-            value: root.meterValue(modelData)
+            label: Format.meterLabel(root.fx, modelData, reading.temp)
+            value: Format.meterValue(root.fx, modelData, root.stats)
             fraction: reading.fraction
             tint: root.levelColor(reading.level)
           }
@@ -445,9 +403,9 @@ Panel {
                   required property var modelData
                   foreground: root.fg
                   fontFamily: root.fontFamily
-                  name: root.groupName(modelData)
+                  name: Format.groupName(root.fx, modelData)
                   cpu: strings.t("percent").arg(Commons.I18n.formatNumber(modelData.cpu, 1))
-                  mem: root.sizeText(modelData.memKb)
+                  mem: Format.sizeText(root.fx, modelData.memKb)
                   killable: modelData.killable
                   stopping: modelData.stopping
                   forced: modelData.forced
