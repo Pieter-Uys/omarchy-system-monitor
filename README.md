@@ -55,6 +55,8 @@ On a new Omarchy install:
 omarchy plugin add https://github.com/Pieter-Uys/omarchy-system-monitor.git --enable
 ```
 
+**Requirements:** only `bash`, `awk`, `top` (procps-ng) and `nproc` (coreutils), which every Omarchy install already has.
+
 Choose the `right` section when asked, or move it later:
 
 ```bash
@@ -106,7 +108,7 @@ omarchy-shell io.github.pieter-uys.system-monitor cycleLabel
 > Everything stays on your machine.
 
 - All data is read locally by `bin/system-monitor` from `/proc`, `/sys/class/hwmon` and `top`.
-- The plugin makes **no network requests** and **writes no files**.
+- The plugin makes **no network requests** and writes no files of its own. Right-clicking saves your chosen bar reading in `shell.json` through the shell's normal widget settings.
 - It only signals a process after you confirm, and only processes owned by your user.
 
 ## Tests
