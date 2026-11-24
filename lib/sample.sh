@@ -148,6 +148,7 @@ gpu_temp() {
 
 # Prints "gpuload\t<0-100>", or nothing if the value isn't a whole percentage.
 emit_load() {
-  [[ $1 =~ ^[0-9]{1,3}$ ]] && (($1 <= 100)) && printf 'gpuload\t%d\n' "$1"
+  local load=$1
+  [[ $load =~ ^[0-9]{1,3}$ ]] && ((load <= 100)) && printf 'gpuload\t%d\n' "$load"
   return 0
 }

@@ -41,17 +41,17 @@ is_killable() {
 # process alone under its name has little to share, so everything else reads resident memory
 # from statm. Sets a variable rather than printing, so a long list costs no subshells.
 read_mem() {
-  local key value rest statm fields
+  local pid=$1 shared=$2 key value rest statm fields
   proc_mem=0
-  if [[ $2 == 1 && -O /proc/$1 ]]; then
+  if [[ $shared == 1 && -O /proc/$pid ]]; then
     while read -r key value rest; do
       if [[ $key == Pss: ]]; then
         [[ $value =~ ^[0-9]{1,15}$ ]] && proc_mem=$value && return
         break
       fi
-    done 2>/dev/null < "/proc/$1/smaps_rollup"
+    done 2>/dev/null < "/proc/$pid/smaps_rollup"
   fi
-  { statm=$(<"/proc/$1/statm"); } 2>/dev/null || return
+  { statm=$(<"/proc/$pid/statm"); } 2>/dev/null || return
   read -ra fields <<< "$statm"
   [[ ${fields[1]:-} =~ ^[0-9]{1,15}$ ]] && proc_mem=$((fields[1] * page_kb))
 }

@@ -45,7 +45,7 @@ function reading(sample, prevCpu) {
     memFraction: NaN, memUsedKb: NaN, memTotalKb: NaN,
     swapFraction: NaN, swapUsedKb: NaN, swapTotalKb: NaN,
     load: [], uptimeSec: NaN, cores: 1,
-    cpuTemp: NaN, gpuTemp: NaN, gpuLoad: NaN, gpuAsleep: false
+    cpuTemp: Number.NaN, gpuTemp: Number.NaN, gpuLoad: Number.NaN, gpuAsleep: false
   }
 
   if (sample.cpu) {
@@ -132,11 +132,11 @@ function parseProcs(raw) {
     if (p.length < 7 || p[0] !== "proc") continue
     if (!/^\d{1,10}$/.test(p[1])) continue
     var cpu = toNumber(p[2]), memKb = toInt(p[3])
-    if (isNaN(cpu) || isNaN(memKb) || memKb < 0) continue
+    if (Number.isNaN(cpu) || Number.isNaN(memKb) || memKb < 0) continue
     if (!/^[01]$/.test(p[4]) || !/^\d{1,20}$/.test(p[5])) continue
     var name = cleanName(p.slice(6).join(" "))
     if (name === "") continue
-    out.push({ pid: parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), memKb: memKb, killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
+    out.push({ pid: Number.parseInt(p[1], 10), cpu: clamp(cpu, 0, 100), memKb: memKb, killable: p[4] === "1" && p[5] !== "0", start: p[5], name: name })
   }
   return out
 }
@@ -146,8 +146,8 @@ function parseProcs(raw) {
 // Sorted by "cpu" or "memory", busiest first, and cut to the top `limit`.
 function groupProcs(procs, sortKey, limit) {
   var byName = {}, groups = []
-  for (var i = 0; i < procs.length; i++) {
-    var p = procs[i], g = byName[p.name]
+  for (const p of procs) {
+    var g = byName[p.name]
     if (!g) {
       g = byName[p.name] = { name: p.name, count: 0, cpu: 0, memKb: 0, killable: true, members: [] }
       groups.push(g)
@@ -160,15 +160,22 @@ function groupProcs(procs, sortKey, limit) {
   }
   var key = sortKey === "cpu" ? "cpu" : "memKb", other = key === "cpu" ? "memKb" : "cpu"
   groups.sort(function(a, b) {
-    return b[key] - a[key] || b[other] - a[other] || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+    return b[key] - a[key] || b[other] - a[other] || compareNames(a.name, b.name)
   })
-  for (i = 0; i < groups.length; i++) groups[i].cpu = clamp(groups[i].cpu, 0, 100)
+  for (const g of groups) g.cpu = clamp(g.cpu, 0, 100)
   return groups.slice(0, limit === undefined ? MAX_ROWS : limit)
+}
+
+// Alphabetical order, the last tie-break between programs.
+function compareNames(a, b) {
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
 }
 
 // { value, unit } for a size in KiB: whole MiB below 1 GiB, else GiB to one decimal.
 function size(kb) {
-  if (isNaN(kb) || kb < 0) return null
+  if (Number.isNaN(kb) || kb < 0) return null
   if (kb < 1048576) return { value: Math.max(0, Math.round(kb / 1024)), decimals: 0, unit: "MiB" }
   return { value: kb / 1048576, decimals: 1, unit: "GiB" }
 }
@@ -176,7 +183,7 @@ function size(kb) {
 // Anything unexpected from the helper counts as refused.
 function parseKillResult(raw) {
   var s = String(raw || "").trim()
-  return ["sent", "gone", "refused"].indexOf(s) >= 0 ? s : "refused"
+  return ["sent", "gone", "refused"].includes(s) ? s : "refused"
 }
 
 // The PIDs a --check of `asked` processes found running, or null if the check didn't finish.
@@ -240,24 +247,24 @@ function meter(key, stats) {
     return { visible: true, fraction: stats.cpu, temp: stats.cpuTemp,
       level: worstLevel(level(stats.cpu), tempLevel(stats.cpuTemp)) }
   case "gpu":
-    if (stats.gpuAsleep) return { visible: true, fraction: 0, temp: NaN, level: "normal" }
+    if (stats.gpuAsleep) return { visible: true, fraction: 0, temp: Number.NaN, level: "normal" }
     // Without a load reading (NVIDIA under nouveau, Intel, radeon), the bar shows temperature.
-    if (isNaN(stats.gpuLoad)) {
-      return { visible: !isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, temp: NaN, level: tempLevel(stats.gpuTemp) }
+    if (Number.isNaN(stats.gpuLoad)) {
+      return { visible: !Number.isNaN(stats.gpuTemp), fraction: stats.gpuTemp / 100, temp: Number.NaN, level: tempLevel(stats.gpuTemp) }
     }
     return { visible: true, fraction: stats.gpuLoad, temp: stats.gpuTemp,
       level: worstLevel(level(stats.gpuLoad), tempLevel(stats.gpuTemp)) }
   case "memory":
-    return { visible: true, fraction: stats.memFraction, temp: NaN, level: level(stats.memFraction) }
+    return { visible: true, fraction: stats.memFraction, temp: Number.NaN, level: level(stats.memFraction) }
   case "swap":
     return {
-      visible: !isNaN(stats.swapTotalKb),
+      visible: !Number.isNaN(stats.swapTotalKb),
       fraction: stats.swapTotalKb === 0 ? 0 : stats.swapFraction,
-      temp: NaN,
+      temp: Number.NaN,
       level: level(stats.swapFraction)
     }
   }
-  return { visible: false, fraction: NaN, temp: NaN, level: "normal" }
+  return { visible: false, fraction: Number.NaN, temp: Number.NaN, level: "normal" }
 }
 
 function gib(kb) {
