@@ -10,6 +10,7 @@
   "noSwap": "None",
   "gpuAsleep": "Asleep",
   "process": "Process",
+  "stopColumn": "Stop",
   "killConfirm": "Stop %2 (PID %1)?",
   "killForceConfirm": "Force kill %2 (PID %1)? Unsaved work will be lost.",
   "killStop": "Stop",

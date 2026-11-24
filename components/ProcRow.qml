@@ -9,11 +9,13 @@ Row {
   property color foreground: "transparent"
   property string fontFamily: ""
   property bool killable: false
-  readonly property real killSlot: Style.space(18)
   property bool header: false
   property string name: ""
   property string cpu: ""
   property string mem: ""
+  // The Stop column's heading. Every row gets it, so every row sizes the column the same.
+  property string stopText: ""
+  readonly property real killSlot: Math.max(Style.space(18), Math.ceil(stopMetrics.advanceWidth))
   property bool stopping: false
   property bool forced: false
   property string status: ""
@@ -57,20 +59,38 @@ Row {
     font.pixelSize: Style.font.bodySmall
   }
 
-  HoverHandler { id: rowHover }
+  TextMetrics {
+    id: stopMetrics
+    font.family: procRow.fontFamily
+    font.pixelSize: Style.font.bodySmall
+    text: procRow.stopText
+  }
 
-  // The slot is always reserved, so the columns don't shift on hover.
+  // The Stop column: its heading in the header row, and a stop button on every process
+  // that's safe to stop. Protected processes leave it empty.
   Item {
     visible: !procRow.stopping
     width: parent.killSlot
-    height: killGlyph.implicitHeight
+    height: procRow.header ? stopHeading.implicitHeight : killGlyph.implicitHeight
+
+    PlainText {
+      id: stopHeading
+      anchors.centerIn: parent
+      visible: procRow.header
+      text: procRow.stopText
+      color: procRow.foreground
+      font.family: procRow.fontFamily
+      font.pixelSize: Style.font.bodySmall
+    }
 
     PlainText {
       id: killGlyph
       anchors.centerIn: parent
       text: String.fromCodePoint(0xF0156)
-      visible: procRow.killable && rowHover.hovered
+      visible: procRow.killable && !procRow.header
       color: killMouse.containsMouse ? Commons.Color.urgent : procRow.foreground
+      // Quiet until pointed at, so a long list of buttons doesn't crowd the readings.
+      opacity: killMouse.containsMouse ? 1 : 0.45
       font.family: procRow.fontFamily
       font.pixelSize: Style.font.body
     }
@@ -79,7 +99,7 @@ Row {
       id: killMouse
       anchors.fill: parent
       anchors.margins: -Style.space(3)
-      enabled: procRow.killable && rowHover.hovered
+      enabled: procRow.killable && !procRow.header
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: procRow.killRequested()

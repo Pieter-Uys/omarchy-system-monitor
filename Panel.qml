@@ -369,6 +369,7 @@ Panel {
             name: strings.t("process")
             cpu: strings.t("cpu")
             mem: strings.t("memory")
+            stopText: strings.t("stopColumn")
           }
 
           PlainText {
@@ -421,6 +422,7 @@ Panel {
                   cpu: strings.t("percent").arg(Commons.I18n.formatNumber(modelData.cpu, 1))
                   mem: root.pct(modelData.mem / 100)
                   killable: modelData.killable
+                  stopText: strings.t("stopColumn")
                   stopping: modelData.stopping
                   forced: modelData.forced
                   forceText: strings.t("killForce")

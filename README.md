@@ -26,7 +26,7 @@ An Omarchy shell bar widget that shows CPU and memory usage with their icons (or
 | **Meters** | CPU, memory, swap, CPU temperature and GPU temperature, tinted as they run hot. With a graphics card, the GPU reading is the card's, not the graphics built into the CPU |
 | **System info** | Load average, core count and uptime |
 | **Process list** | Scrollable list of the 50 busiest processes, refreshed while the panel is open |
-| **Safe process control** | Hover a process to stop it, with a confirmation step |
+| **Safe process control** | Processes that are safe to stop have a stop button in the **Stop** column, with a confirmation step |
 
 ### Process control
 
