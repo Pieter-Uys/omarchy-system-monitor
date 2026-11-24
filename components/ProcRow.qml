@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Commons as Commons
 
-// One line of the process list, or its column header. Clicking the CPU or Memory heading
+// One line of the program list, or its column header. Clicking the CPU or Memory heading
 // sorts the list by it; the column in use reads bold.
 Row {
   id: procRow
@@ -106,7 +106,7 @@ Row {
     }
   }
 
-  // While a process shuts down, its row shows the wait and a force option.
+  // While a program shuts down, its row shows the wait and a force option.
   PlainText {
     visible: procRow.stopping
     width: parent.numWidth * 2 + parent.killSlot + parent.spacing * 2 + parent.stoppingExtra
