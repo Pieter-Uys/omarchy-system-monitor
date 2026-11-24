@@ -1,4 +1,4 @@
-// Run from the repository with: node --test tests/
+// Run from the repository with: node --test tests/*.test.js
 const test = require("node:test")
 const assert = require("node:assert")
 const fs = require("node:fs")

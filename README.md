@@ -138,13 +138,13 @@ omarchy-shell io.github.pieter-uys.system-monitor cycleLabel
 From a clone of this repository (needs Node.js 20 or later, on Linux):
 
 ```bash
-node --test tests/
+node --test tests/*.test.js
 ```
 
 Or against the installed copy:
 
 ```bash
-node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/
+node --test ~/.config/omarchy/plugins/io.github.pieter-uys.system-monitor/tests/*.test.js
 ```
 
 The tests run the real helper script, so they start and stop a few `sleep` processes of their own. They never touch other processes. The same tests and `shellcheck` run on every push.

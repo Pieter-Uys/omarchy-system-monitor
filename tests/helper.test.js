@@ -1,4 +1,4 @@
-// Locks in the helper's output. Run from the repository with: node --test tests/
+// Locks in the helper's output. Run from the repository with: node --test tests/*.test.js
 const test = require("node:test")
 const assert = require("node:assert")
 const fs = require("node:fs")
