@@ -24,6 +24,13 @@ read_proc_stat() {
   [[ -n $proc_state && -n $proc_start ]]
 }
 
+# True if <pid> is still running and is the process that started at <start>, not a later
+# one that reused its PID.
+is_same_process() {
+  local pid=$1 start=$2
+  read_proc_stat "$pid" && [[ $proc_state != Z && $proc_start == "$start" ]]
+}
+
 # True for a live process owned by this user that isn't protected.
 is_killable() {
   local comm
@@ -120,7 +127,7 @@ stop_proc() {
     fi
   done
   for ((i = 0; i < ${#args[@]}; i += 2)); do
-    read_proc_stat "${args[i]}" && [[ $proc_state != Z && $proc_start == "${args[i + 1]}" ]] || continue
+    is_same_process "${args[i]}" "${args[i + 1]}" || continue
     if is_killable "${args[i]}" && kill -s "$signal" "${args[i]}" 2>/dev/null; then
       ((sent++))
     else
@@ -140,8 +147,7 @@ stop_proc() {
 # so a failed check can't be mistaken for every process having exited.
 check_procs() {
   while (($# >= 2)); do
-    if [[ $1 =~ ^[1-9][0-9]{0,9}$ && $2 =~ ^[1-9][0-9]{0,19}$ ]] &&
-      read_proc_stat "$1" && [[ $proc_state != Z && $proc_start == "$2" ]]; then
+    if [[ $1 =~ ^[1-9][0-9]{0,9}$ && $2 =~ ^[1-9][0-9]{0,19}$ ]] && is_same_process "$1" "$2"; then
       printf 'alive\t%s\n' "$1"
     fi
     shift 2
