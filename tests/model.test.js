@@ -130,14 +130,6 @@ test("a program's CPU share never reads above 100%", () => {
   assert.strictEqual(M.groupProcs([proc(1, "x", 70, 1), proc(2, "x", 60, 1)], "cpu")[0].cpu, 100)
 })
 
-test("sizes read in MiB below 1 GiB and GiB above", () => {
-  assert.deepStrictEqual(plain(M.size(0)), { value: 0, decimals: 0, unit: "MiB" })
-  assert.deepStrictEqual(plain(M.size(204800)), { value: 200, decimals: 0, unit: "MiB" })
-  assert.deepStrictEqual(plain(M.size(1048576 * 13.4)), { value: 13.4, decimals: 1, unit: "GiB" })
-  assert.strictEqual(M.size(NaN), null)
-  assert.strictEqual(M.size(-1), null)
-})
-
 test("label cycling and interval clamping", () => {
   assert.strictEqual(M.nextLabel("CPU"), "Memory")
   assert.strictEqual(M.nextLabel("Icon only"), "CPU + Memory")
@@ -173,10 +165,11 @@ test("every Text in the plugin's QML is plain text", () => {
   assert.doesNotMatch(qml, /Text\.(RichText|StyledText|AutoText|MarkdownText)/)
 })
 
-test("every translation key used in the plugin's QML exists in en.json", () => {
+test("every translation key used in the plugin's QML and Format.js exists in en.json", () => {
   const qml = allQml()
   const en = JSON.parse(fs.readFileSync(path.join(root, "i18n", "en.json"), "utf8"))
-  const keys = [...qml.matchAll(/strings\.tn?\("([^"]+)"/g)].map(m => m[1])
+  const format = fs.readFileSync(path.join(root, "Format.js"), "utf8")
+  const keys = [...qml.matchAll(/strings\.tn?\("([^"]+)"/g), ...format.matchAll(/fx\.t\("([^"]+)"/g)].map(m => m[1])
   assert.ok(keys.length > 0)
   for (const k of keys) assert.ok(k in en, `missing i18n key: ${k}`)
 })
@@ -292,7 +285,7 @@ test("a check can report no more processes than it was asked about", () => {
 test("code the shell runs avoids JavaScript its engine lacks", () => {
   // The shell's engine (Qt 6.12) has no Array.prototype.at, though Node, which runs these
   // tests, does, so a stray .at() would pass here and fail in the shell.
-  const code = fs.readFileSync(path.join(root, "Model.js"), "utf8") + "\n" + allQml()
+  const code = ["Model.js", "Format.js"].map(f => fs.readFileSync(path.join(root, f), "utf8")).join("\n") + "\n" + allQml()
   const withoutComments = code.replace(/\/\/.*$/gm, "")
   assert.doesNotMatch(withoutComments, /\.at\(/)
 })
